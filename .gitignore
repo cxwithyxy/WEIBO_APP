@@ -1,0 +1,14 @@
+# 构建产物
+out/
+*.class
+
+# 本地会话（绝不入库）
+cookies.tsv
+*.cookie
+cookies.txt
+
+# IDE / 系统
+.idea/
+*.iml
+.vscode/
+.DS_Store
