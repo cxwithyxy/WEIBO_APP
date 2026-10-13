@@ -46,11 +46,32 @@ data class Status(
     @SerializedName("attitudes_count") val attitudesCount: Int? = null,
     val source: String? = null,
     val user: User? = null,
+    @SerializedName("pic_ids") val picIds: List<String>? = null,
+    @SerializedName("pic_infos") val picInfos: Map<String, PicInfo>? = null,
+    @SerializedName("pic_num") val picNum: Int? = null,
+    @SerializedName("retweeted_status") val retweetedStatus: Status? = null,
 ) {
     /** 纯文本（优先 text_raw，其次剥离 HTML 标签） */
     val plainText: String
         get() = textRaw ?: text?.replace(Regex("<[^>]+>"), "") ?: ""
+
+    /** 配图 URL（优先 bmiddle 中等尺寸，缺失时按 sinaimg 约定拼接口径） */
+    val imageUrls: List<String>
+        get() = (picIds ?: emptyList()).map { id ->
+            picInfos?.get(id)
+                ?.let { p -> p.bmiddle?.url ?: p.thumbnail?.url ?: p.large?.url }
+                ?: "https://wx1.sinaimg.cn/wap360/$id.jpg"
+        }
 }
+
+/** pic_infos 里的单张图片（只取用到的几个尺寸） */
+data class PicInfo(
+    val thumbnail: PicUrl? = null,
+    val bmiddle: PicUrl? = null,
+    val large: PicUrl? = null,
+)
+
+data class PicUrl(val url: String? = null)
 
 data class HotItem(
     val word: String? = null,
@@ -75,6 +96,12 @@ data class Comment(
         get() = textRaw ?: text?.replace(Regex("<[^>]+>"), "") ?: ""
 }
 
+/** 首页时间线的一页（带下一页游标） */
+data class TimelinePage(
+    val statuses: List<Status>,
+    val nextCursor: String?,
+)
+
 /** 热搜榜条目（hot_band） */
 data class HotBandItem(
     val word: String? = null,
@@ -98,6 +125,8 @@ internal data class TimelineResp(
     val statuses: List<Status>? = null,
     @SerializedName("since_id") val sinceId: String? = null,
     @SerializedName("max_id") val maxId: String? = null,
+    @SerializedName("since_id_str") val sinceIdStr: String? = null,
+    @SerializedName("max_id_str") val maxIdStr: String? = null,
 )
 
 internal data class MyBlogResp(

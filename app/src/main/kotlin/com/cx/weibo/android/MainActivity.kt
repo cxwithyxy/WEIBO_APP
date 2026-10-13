@@ -11,10 +11,11 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
-import com.cx.weibo.android.ui.home.HomeScreen
 import com.cx.weibo.android.ui.login.LoginScreen
 import com.cx.weibo.android.ui.login.LoginUiState
 import com.cx.weibo.android.ui.login.LoginViewModel
+import com.cx.weibo.android.ui.timeline.TimelineScreen
+import com.cx.weibo.android.ui.timeline.TimelineViewModel
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -31,7 +32,13 @@ class MainActivity : ComponentActivity() {
 
 @Composable
 private fun AppRoot() {
-    val vm: LoginViewModel = viewModel()
-    val state by vm.state.collectAsStateWithLifecycle()
-    if (state is LoginUiState.LoggedIn) HomeScreen() else LoginScreen(vm)
+    val loginVm: LoginViewModel = viewModel()
+    val state by loginVm.state.collectAsStateWithLifecycle()
+
+    if (state is LoginUiState.LoggedIn) {
+        val timelineVm: TimelineViewModel = viewModel()
+        TimelineScreen(timelineVm)
+    } else {
+        LoginScreen(loginVm)
+    }
 }

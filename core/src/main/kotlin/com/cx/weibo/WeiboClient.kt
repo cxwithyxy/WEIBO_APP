@@ -57,13 +57,25 @@ class WeiboClient(engine: HttpEngine) {
 
     // ---------------- 接口 ----------------
 
-    /** 首页时间线（关注的人） */
-    fun homeTimeline(count: Int = 20, sinceId: String = "0"): List<Status> {
+    /**
+     * 首页时间线一页。
+     *
+     * 翻页语义（实测）：`since_id` = 「给我比这个游标更旧的」；
+     * 把服务端返回的 `nextCursor`（即响应里的 max_id_str）传回 `sinceId` 即可续拉。
+     */
+    fun homeTimelinePage(sinceId: String = "0", count: Int = 20): TimelinePage {
         val json = getJson("/ajax/feed/unreadfriendstimeline?since_id=$sinceId&refresh=1&count=$count")
         val r = http.gson.fromJson(json, TimelineResp::class.java)
         checkOk(r?.ok, r?.message, "首页时间线")
-        return r?.statuses ?: emptyList()
+        return TimelinePage(
+            statuses = r?.statuses ?: emptyList(),
+            nextCursor = r?.maxIdStr ?: r?.maxId,
+        )
     }
+
+    /** 首页时间线（关注的人）—— 只要第一页时用这个 */
+    fun homeTimeline(count: Int = 20, sinceId: String = "0"): List<Status> =
+        homeTimelinePage(sinceId, count).statuses
 
     /** 某个用户的微博列表（默认自己） */
     fun myBlog(uid: String? = null, page: Int = 1): List<Status> {
