@@ -1,6 +1,11 @@
 # 构建产物
 out/
+build/
+.gradle/
 *.class
+
+# Gradle 本地配置
+local.properties
 
 # 本地会话（绝不入库）
 cookies.tsv
