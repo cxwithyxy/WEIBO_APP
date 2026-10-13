@@ -3,39 +3,35 @@ package com.cx.weibo.android
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.height
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.Alignment
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.viewmodel.compose.viewModel
+import com.cx.weibo.android.ui.home.HomeScreen
+import com.cx.weibo.android.ui.login.LoginScreen
+import com.cx.weibo.android.ui.login.LoginUiState
+import com.cx.weibo.android.ui.login.LoginViewModel
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        setContent { App() }
+        setContent {
+            MaterialTheme {
+                Surface(modifier = Modifier.fillMaxSize()) {
+                    AppRoot()
+                }
+            }
+        }
     }
 }
 
 @Composable
-private fun App() {
-    MaterialTheme {
-        Surface(modifier = Modifier.fillMaxSize()) {
-            Column(
-                modifier = Modifier.fillMaxSize(),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.Center,
-            ) {
-                Text("微博客户端", style = MaterialTheme.typography.headlineMedium)
-                Spacer(Modifier.height(8.dp))
-                Text("Phase 2 骨架就绪", style = MaterialTheme.typography.bodyMedium)
-            }
-        }
-    }
+private fun AppRoot() {
+    val vm: LoginViewModel = viewModel()
+    val state by vm.state.collectAsStateWithLifecycle()
+    if (state is LoginUiState.LoggedIn) HomeScreen() else LoginScreen(vm)
 }
