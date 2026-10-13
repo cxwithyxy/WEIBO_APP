@@ -4,6 +4,7 @@ import com.cx.weibo.http.HttpEngine
 import com.cx.weibo.http.RawRequest
 import com.cx.weibo.http.RawResponse
 import com.google.gson.Gson
+import com.google.gson.JsonElement
 import com.google.gson.annotations.SerializedName
 import java.net.URI
 import java.net.URLEncoder
@@ -50,8 +51,28 @@ data class Status(
     @SerializedName("pic_infos") val picInfos: Map<String, PicInfo>? = null,
     @SerializedName("pic_num") val picNum: Int? = null,
     @SerializedName("retweeted_status") val retweetedStatus: Status? = null,
-    @SerializedName("isAd") val isAd: Boolean? = null,
+    @SerializedName("isAd") val isAd: JsonElement? = null,
 ) {
+    /**
+     * 是否广告。
+     * 服务端这个字段是**多态的** —— 实测有时是 bool，有时是数字；
+     * 所以用 JsonElement 承接，这里统一转成布尔。
+     */
+    val isAdFlag: Boolean
+        get() {
+            val e = isAd ?: return false
+            return runCatching {
+                val p = e.asJsonPrimitive
+                when {
+                    p.isBoolean -> p.asBoolean
+                    p.isNumber -> p.asNumber.toInt() != 0
+                    p.isString -> p.asString.toIntOrNull()?.let { it != 0 }
+                        ?: p.asString.equals("true", ignoreCase = true)
+                    else -> false
+                }
+            }.getOrDefault(false)
+        }
+
     /** 纯文本（优先 text_raw，其次剥离 HTML 标签） */
     val plainText: String
         get() = textRaw ?: text?.replace(Regex("<[^>]+>"), "") ?: ""

@@ -140,7 +140,7 @@ class TimelineViewModel(app: Application) : AndroidViewModel(app) {
         raw.asSequence()
             .filter { !(f.hideReposts && it.retweetedStatus != null) }
             .filter { !(f.onlyWithImages && it.imageUrls.isEmpty()) }
-            .filter { !(f.hideAds && it.isAd == true) }
+            .filter { !(f.hideAds && it.isAdFlag) }
             .sortedByDescending { WeiboTime.epoch(it.createdAt) }
             .toList()
 }
