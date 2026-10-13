@@ -141,14 +141,22 @@ class WeiboClient(engine: HttpEngine) {
      * @param maxId 翻页游标（用上次响应的 max_id，首次传 0）
      * @param flow  0=按热度（首页可用，翻页无效），1=按时间（可翻页）
      */
-    fun comments(mid: String, count: Int = 20, maxId: Long = 0, flow: Int = 0): List<Comment> {
+    fun comments(mid: String, count: Int = 20, maxId: Long = 0, flow: Int = 0): List<Comment> =
+        commentsPage(mid, count, maxId, flow).comments
+
+    /** 评论一页（带下一页游标）—— 推荐用 `flow = 1` 以便翻页 */
+    fun commentsPage(mid: String, count: Int = 20, maxId: Long = 0, flow: Int = 1): CommentPage {
         val json = getJson(
             "/ajax/statuses/buildComments?is_reload=1&id=$mid&is_show_bulletin=2" +
                 "&is_mix=0&count=$count&max_id=$maxId&flow=$flow"
         )
         val r = http.gson.fromJson(json, CommentsResp::class.java)
         checkOk(r?.ok, r?.message, "评论")
-        return r?.data ?: emptyList()
+        return CommentPage(
+            comments = r?.data ?: emptyList(),
+            nextMaxId = r?.maxId,
+            totalNumber = r?.totalNumber,
+        )
     }
 
     /** 转发列表 */

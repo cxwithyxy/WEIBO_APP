@@ -1,6 +1,7 @@
 package com.cx.weibo.android.ui.timeline
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -27,10 +28,11 @@ import coil3.compose.AsyncImage
 import com.cx.weibo.Status
 
 @Composable
-fun StatusCard(status: Status) {
+fun StatusCard(status: Status, onClick: (() -> Unit)? = null) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
+            .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier)
             .padding(horizontal = 16.dp, vertical = 12.dp)
     ) {
         Header(status)

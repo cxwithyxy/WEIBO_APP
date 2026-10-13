@@ -96,6 +96,13 @@ data class Comment(
         get() = textRaw ?: text?.replace(Regex("<[^>]+>"), "") ?: ""
 }
 
+/** 评论的一页（带下一页游标与总数） */
+data class CommentPage(
+    val comments: List<Comment>,
+    val nextMaxId: Long?,
+    val totalNumber: Int?,
+)
+
 /** 首页时间线的一页（带下一页游标） */
 data class TimelinePage(
     val statuses: List<Status>,
