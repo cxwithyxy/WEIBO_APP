@@ -2,6 +2,7 @@ package com.cx.weibo.android
 
 import android.os.Bundle
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
@@ -43,9 +44,12 @@ private fun AppRoot() {
         return
     }
 
-    // 极简导航：详情页作为覆盖层，其余交给底部导航
+    // 极简导航：详情页是覆盖层，返回键先关详情
     var detailMid by remember { mutableStateOf<String?>(null) }
     val mid = detailMid
+
+    BackHandler(enabled = mid != null) { detailMid = null }
+
     if (mid != null) {
         StatusDetailScreen(
             mid = mid,

@@ -1,9 +1,11 @@
 package com.cx.weibo.android.ui
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Search
@@ -27,12 +29,14 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import com.cx.weibo.android.ui.hot.HotScreen
 import com.cx.weibo.android.ui.profile.ProfileScreen
 import com.cx.weibo.android.ui.search.SearchScreen
+import com.cx.weibo.android.ui.timeline.FeedKind
 import com.cx.weibo.android.ui.timeline.TimelineScreen
 
 private data class Tab(val title: String, val icon: ImageVector)
 
 private val TABS = listOf(
     Tab("首页", Icons.Filled.Home),
+    Tab("关注", Icons.Filled.Favorite),
     Tab("搜索", Icons.Filled.Search),
     Tab("热搜", Icons.Filled.Star),
     Tab("我的", Icons.Filled.Person),
@@ -43,6 +47,9 @@ private val TABS = listOf(
 fun MainTabs(onOpenDetail: (String) -> Unit) {
     var tab by rememberSaveable { mutableIntStateOf(0) }
     var seed by remember { mutableStateOf("") }
+
+    // 返回键：不在首页时先回首页，而不是退出 App
+    BackHandler(enabled = tab != 0) { tab = 0 }
 
     Scaffold(
         topBar = { TopAppBar(title = { Text(TABS[tab].title) }) },
@@ -61,18 +68,20 @@ fun MainTabs(onOpenDetail: (String) -> Unit) {
     ) { padding ->
         Box(Modifier.fillMaxSize().padding(padding)) {
             when (tab) {
-                0 -> TimelineScreen(onOpenDetail = onOpenDetail)
+                0 -> TimelineScreen(kind = FeedKind.RECOMMEND, onOpenDetail = onOpenDetail)
 
-                1 -> SearchScreen(
+                1 -> TimelineScreen(kind = FeedKind.FOLLOWING, onOpenDetail = onOpenDetail)
+
+                2 -> SearchScreen(
                     seed = seed,
                     onSeedConsumed = { seed = "" },
                     onOpenDetail = onOpenDetail,
                 )
 
-                2 -> HotScreen(
+                3 -> HotScreen(
                     onSearchWord = { word ->
                         seed = word
-                        tab = 1
+                        tab = 2
                     }
                 )
 

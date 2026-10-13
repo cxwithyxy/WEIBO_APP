@@ -50,6 +50,7 @@ data class Status(
     @SerializedName("pic_infos") val picInfos: Map<String, PicInfo>? = null,
     @SerializedName("pic_num") val picNum: Int? = null,
     @SerializedName("retweeted_status") val retweetedStatus: Status? = null,
+    @SerializedName("isAd") val isAd: Boolean? = null,
 ) {
     /** 纯文本（优先 text_raw，其次剥离 HTML 标签） */
     val plainText: String

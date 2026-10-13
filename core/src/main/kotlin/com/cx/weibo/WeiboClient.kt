@@ -77,6 +77,22 @@ class WeiboClient(engine: HttpEngine) {
     fun homeTimeline(count: Int = 20, sinceId: String = "0"): List<Status> =
         homeTimelinePage(sinceId, count).statuses
 
+    /**
+     * 「我的关注」时间线（纯关注，按时间倒序，无推荐/广告）。
+     * 走 `/ajax/feed/friendstimeline` —— 与首页的推荐流是**两个不同的流**（实测）。
+     */
+    fun followingTimelinePage(sinceId: String = "0", count: Int = 25): TimelinePage {
+        val json = getJson("/ajax/feed/friendstimeline?since_id=$sinceId&count=$count")
+        val r = http.gson.fromJson(json, TimelineResp::class.java)
+        checkOk(r?.ok, r?.message, "关注时间线")
+        val list = r?.statuses ?: emptyList()
+        return TimelinePage(
+            statuses = list,
+            // 该端点不一定给游标，退化用最后一条的 id
+            nextCursor = r?.maxIdStr ?: r?.maxId ?: list.lastOrNull()?.idstr,
+        )
+    }
+
     /** 某个用户的微博列表（默认自己） */
     fun myBlog(uid: String? = null, page: Int = 1): List<Status> {
         val u = uid ?: this.uid ?: throw WeiboException("未知 uid，请先 login/whoami")
