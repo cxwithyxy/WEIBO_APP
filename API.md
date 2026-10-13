@@ -396,17 +396,20 @@ GET /ajax/profile/followContent?uid=<uid>
 本仓库即一个可直接使用的 Kotlin 实现：
 
 ```bash
-./build.sh          # 编译
-./run.sh login      # 扫码登录
-./run.sh timeline 20
-./run.sh search 雷军
-./run.sh comments <mid>
+./build.sh          # 编译（Gradle wrapper 自动解析依赖）
+./gradlew :cli:installDist
+./cli/build/install/cli/bin/cli login      # 扫码登录
+./cli/build/install/cli/bin/cli timeline 20
+./cli/build/install/cli/bin/cli search 雷军
+./cli/build/install/cli/bin/cli comments <mid>
 ```
 
 作为库：
 
 ```kotlin
-val client = WeiboClient()
+// core 不含平台 HTTP 实现，需由调用方注入引擎
+// JVM 上用 JvmHttpEngine；Android 上用 OkHttpEngine
+val client = WeiboClient(JvmHttpEngine())
 val cookie = Path.of(System.getProperty("user.home"), ".weibo-client", "cookies.tsv")
 
 if (!client.restore(cookie)) {

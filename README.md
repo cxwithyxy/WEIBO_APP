@@ -12,7 +12,7 @@
 ## 快速开始
 
 ```bash
-./build.sh          # 编译（需要 JDK 21 + ~/kotlinc）
+./build.sh          # 编译（Gradle wrapper 自动解析依赖）
 ./run.sh login      # 扫码登录，自动保存会话
 ./run.sh whoami     # 看当前账号
 ./run.sh timeline   # 首页时间线
@@ -42,7 +42,7 @@
 ## 作为库使用
 
 ```kotlin
-val client = WeiboClient()
+val client = WeiboClient(JvmHttpEngine())
 val cookieFile = Path.of(System.getProperty("user.home"), ".weibo-client", "cookies.tsv")
 
 if (!client.restore(cookieFile)) {
@@ -61,14 +61,21 @@ client.hotSearch().take(10).forEach { println(it.word) }
 ## 结构
 
 ```
-src/main/kotlin/
-├── Main.kt                     CLI 演示
+core/                           协议核心（平台无关）
 └── com/cx/weibo/
-    ├── WeiboCore.kt            模型 + HTTP 层（自管 cookie / 自跟随重定向）
+    ├── http/HttpEngine.kt      HTTP 引擎接口（由平台注入）
+    ├── WeiboCore.kt            模型 + WeiboHttp（自管 cookie / 自跟随重定向）
     ├── WeiboAuth.kt            扫码登录（SSO v2）
-    ├── WeiboClient.kt          API 门面（接口全集中于此，便于修补）
-    └── ...
+    └── WeiboClient.kt          API 门面（接口全集中于此，便于修补）
+
+cli/                            JVM 命令行前端
+└── com/cx/weibo/
+    ├── http/JvmHttpEngine.kt   java.net.http 实现
+    └── cli/Main.kt             CLI 命令
 ```
+
+**HTTP 层通过 `HttpEngine` 接口注入**：CLI 用 `JvmHttpEngine`（`java.net.http`），
+Android 端将用 `OkHttpEngine`。`core` 不含任何平台特有 API，可直接被 Android 复用。
 
 接口层**集中隔离**在 `WeiboClient.kt` —— 微博前端一改只需动这一个文件。
 
@@ -139,5 +146,5 @@ src/main/kotlin/
 ## 环境依赖
 
 - JDK 21（`java.net.http.HttpClient`）
-- Kotlin 编译器（本机为手工搭建的 `~/kotlinc`，见 `build.sh`）
-- Gson 2.11.0（`libs/`，JSON 解析）
+- Gradle wrapper 8.12.1（`./gradlew`，自动解析依赖）
+- Kotlin 2.0.21 / Gson 2.11.0（由 Gradle 从 Maven Central 解析）
