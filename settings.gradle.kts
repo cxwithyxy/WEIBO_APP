@@ -15,4 +15,4 @@ dependencyResolutionManagement {
 
 rootProject.name = "weibo-client"
 
-include(":core", ":cli")
+include(":core", ":cli", ":app")
