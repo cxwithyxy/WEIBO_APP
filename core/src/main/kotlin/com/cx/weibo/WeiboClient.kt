@@ -63,15 +63,21 @@ class WeiboClient(engine: HttpEngine) {
      * 翻页语义（实测）：`since_id` = 「给我比这个游标更旧的」；
      * 把服务端返回的 `nextCursor`（即响应里的 max_id_str）传回 `sinceId` 即可续拉。
      */
-    fun homeTimelinePage(sinceId: String = "0", count: Int = 20): TimelinePage {
-        val json = getJson("/ajax/feed/unreadfriendstimeline?since_id=$sinceId&refresh=1&count=$count")
-        val r = http.gson.fromJson(json, TimelineResp::class.java)
+    fun homeTimelinePage(sinceId: String = "0", count: Int = 20): TimelinePage =
+        homeTimelinePageRaw(sinceId, count).let { TimelinePage(it.statuses, it.nextCursor) }
+
+    /** 同 homeTimelinePage，但同时返回**原始响应文本**（用于本地缓存） */
+    fun homeTimelinePageRaw(sinceId: String = "0", count: Int = 20): TimelineRaw {
+        val raw = getJson("/ajax/feed/unreadfriendstimeline?since_id=$sinceId&refresh=1&count=$count")
+        val r = http.gson.fromJson(raw, TimelineResp::class.java)
         checkOk(r?.ok, r?.message, "首页时间线")
-        return TimelinePage(
-            statuses = r?.statuses ?: emptyList(),
-            nextCursor = r?.maxIdStr ?: r?.maxId,
-        )
+        return TimelineRaw(raw, r?.statuses ?: emptyList(), r?.maxIdStr ?: r?.maxId)
     }
+
+    /** 把缓存下来的响应原文重新解析成微博列表（与网络路径**同一套解析**） */
+    fun parseTimelineRaw(raw: String): List<Status> =
+        runCatching { http.gson.fromJson(raw, TimelineResp::class.java)?.statuses }.getOrNull()
+            ?: emptyList()
 
     /** 首页时间线（关注的人）—— 只要第一页时用这个 */
     fun homeTimeline(count: Int = 20, sinceId: String = "0"): List<Status> =
@@ -81,14 +87,18 @@ class WeiboClient(engine: HttpEngine) {
      * 「我的关注」时间线（纯关注，按时间倒序，无推荐/广告）。
      * 走 `/ajax/feed/friendstimeline` —— 与首页的推荐流是**两个不同的流**（实测）。
      */
-    fun followingTimelinePage(sinceId: String = "0", count: Int = 25): TimelinePage {
-        val json = getJson("/ajax/feed/friendstimeline?since_id=$sinceId&count=$count")
-        val r = http.gson.fromJson(json, TimelineResp::class.java)
+    fun followingTimelinePage(sinceId: String = "0", count: Int = 25): TimelinePage =
+        followingTimelinePageRaw(sinceId, count).let { TimelinePage(it.statuses, it.nextCursor) }
+
+    /** 同 followingTimelinePage，但同时返回原始响应文本（用于本地缓存） */
+    fun followingTimelinePageRaw(sinceId: String = "0", count: Int = 25): TimelineRaw {
+        val raw = getJson("/ajax/feed/friendstimeline?since_id=$sinceId&count=$count")
+        val r = http.gson.fromJson(raw, TimelineResp::class.java)
         checkOk(r?.ok, r?.message, "关注时间线")
         val list = r?.statuses ?: emptyList()
-        return TimelinePage(
+        return TimelineRaw(
+            raw = raw,
             statuses = list,
-            // 该端点不一定给游标，退化用最后一条的 id
             nextCursor = r?.maxIdStr ?: r?.maxId ?: list.lastOrNull()?.idstr,
         )
     }

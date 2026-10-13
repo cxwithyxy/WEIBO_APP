@@ -20,6 +20,23 @@ android {
         compose = true
     }
 
+    signingConfigs {
+        // 复用 debug 密钥签 release，方便直接安装体验
+        getByName("debug")
+    }
+
+    buildTypes {
+        release {
+            isMinifyEnabled = true
+            isShrinkResources = true
+            signingConfig = signingConfigs.getByName("debug")
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules.pro",
+            )
+        }
+    }
+
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
@@ -36,6 +53,9 @@ kotlin {
 
 dependencies {
     implementation(project(":core"))
+
+    // 缓存层需要 Gson（core 用的是 implementation，不透传）
+    implementation("com.google.code.gson:gson:2.11.0")
 
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
 

@@ -26,12 +26,16 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import kotlinx.coroutines.flow.first
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -54,9 +58,38 @@ fun TimelineScreen(
     }
     LaunchedEffect(nearBottom) { if (nearBottom) vm.loadMore() }
 
+    // 重开后跳回上次阅读的位置（每条流各记一份）
+    // 关键：要等列表**真正布局出来**再滚 —— 否则同一帧里的 scrollToItem
+    // 会被 LazyColumn 的首次布局覆盖掉（踩过）。
+    var restored by remember(kind) { mutableStateOf(false) }
+    LaunchedEffect(ui.items, ui.loading) {
+        if (restored || ui.loading) return@LaunchedEffect
+        val a = ui.anchorId
+            ?: return@LaunchedEffect
+        val idx = ui.items.indexOfFirst { it.idstr == a }
+        if (idx < 0) {
+            restored = true
+            return@LaunchedEffect
+        }
+        snapshotFlow { listState.layoutInfo.totalItemsCount }.first { it > idx }
+        listState.scrollToItem(idx)
+        restored = true
+    }
+
+    // 持续记录当前顶部那条
+    // 注意：必须把 totalItemsCount 也纳入快照 —— 否则列表加载完成时
+    // firstVisibleItemIndex 仍是 0（没变化），snapshotFlow 不会再发射，锚点就存不上。
+    LaunchedEffect(listState) {
+        snapshotFlow {
+            listState.firstVisibleItemIndex to listState.layoutInfo.totalItemsCount
+        }.collect { (idx, _) ->
+            vm.ui.value.items.getOrNull(idx)?.idstr?.let { vm.saveAnchor(it) }
+        }
+    }
+
     Column(Modifier.fillMaxSize()) {
         FilterBar(ui.filter, ui.raw.size, ui.items.size, vm::setFilter)
-        HorizontalDivider()
+        HorizontalDivider(color = MaterialTheme.colorScheme.outline)
 
         PullToRefreshBox(
             isRefreshing = ui.refreshing,

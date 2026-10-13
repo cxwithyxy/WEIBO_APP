@@ -5,7 +5,6 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -13,21 +12,34 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.cx.weibo.android.data.Prefs
 import com.cx.weibo.android.ui.MainTabs
 import com.cx.weibo.android.ui.detail.StatusDetailScreen
 import com.cx.weibo.android.ui.login.LoginScreen
 import com.cx.weibo.android.ui.login.LoginUiState
 import com.cx.weibo.android.ui.login.LoginViewModel
+import com.cx.weibo.android.ui.theme.ThemeMode
+import com.cx.weibo.android.ui.theme.WeiboTheme
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContent {
-            MaterialTheme {
+            val ctx = LocalContext.current
+            var themeMode by remember { mutableStateOf(Prefs.themeMode(ctx)) }
+
+            WeiboTheme(ThemeMode.valueOf(themeMode)) {
                 Surface(modifier = Modifier.fillMaxSize()) {
-                    AppRoot()
+                    AppRoot(
+                        themeMode = themeMode,
+                        onThemeChange = {
+                            Prefs.setThemeMode(ctx, it)
+                            themeMode = it
+                        },
+                    )
                 }
             }
         }
@@ -35,7 +47,10 @@ class MainActivity : ComponentActivity() {
 }
 
 @Composable
-private fun AppRoot() {
+private fun AppRoot(
+    themeMode: String,
+    onThemeChange: (String) -> Unit,
+) {
     val loginVm: LoginViewModel = viewModel()
     val state by loginVm.state.collectAsStateWithLifecycle()
 
@@ -57,6 +72,10 @@ private fun AppRoot() {
             onOpenDetail = { detailMid = it },
         )
     } else {
-        MainTabs(onOpenDetail = { detailMid = it })
+        MainTabs(
+            themeMode = themeMode,
+            onThemeChange = onThemeChange,
+            onOpenDetail = { detailMid = it },
+        )
     }
 }

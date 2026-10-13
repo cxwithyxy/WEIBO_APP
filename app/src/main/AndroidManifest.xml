@@ -6,7 +6,7 @@
     <application
         android:name=".App"
         android:label="微博客户端"
-        android:theme="@android:style/Theme.Material.Light.NoActionBar"
+        android:theme="@style/Theme.WeiboClient"
         android:supportsRtl="true">
 
         <activity

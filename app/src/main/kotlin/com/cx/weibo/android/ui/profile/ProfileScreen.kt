@@ -16,6 +16,8 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -35,6 +37,8 @@ import com.cx.weibo.android.ui.timeline.StatusCard
 
 @Composable
 fun ProfileScreen(
+    themeMode: String,
+    onThemeChange: (String) -> Unit,
     onOpenDetail: (String) -> Unit,
     vm: ProfileViewModel = viewModel(),
 ) {
@@ -55,6 +59,7 @@ fun ProfileScreen(
 
         else -> LazyColumn(Modifier.fillMaxSize()) {
             item { ProfileHeader(ui.user!!) }
+            item { ThemeSection(themeMode, onThemeChange) }
             item {
                 HorizontalDivider(thickness = 6.dp, color = MaterialTheme.colorScheme.surfaceVariant)
                 Row(
@@ -92,6 +97,36 @@ fun ProfileScreen(
                 StatusCard(s, onClick = { s.idstr?.let(onOpenDetail) })
             }
         }
+    }
+}
+
+/** 外观选择：跟随系统 / 浅色 / 深色 */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun ThemeSection(themeMode: String, onChange: (String) -> Unit) {
+    Column(Modifier.fillMaxWidth()) {
+        Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp)) {
+            Text(
+                "外观",
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.SemiBold,
+            )
+            Spacer(Modifier.height(8.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                listOf(
+                    "SYSTEM" to "跟随系统",
+                    "LIGHT" to "浅色",
+                    "DARK" to "深色",
+                ).forEach { (value, label) ->
+                    FilterChip(
+                        selected = themeMode == value,
+                        onClick = { onChange(value) },
+                        label = { Text(label) },
+                    )
+                }
+            }
+        }
+        HorizontalDivider(thickness = 6.dp, color = MaterialTheme.colorScheme.surfaceVariant)
     }
 }
 

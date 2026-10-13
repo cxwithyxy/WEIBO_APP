@@ -26,7 +26,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
 import com.cx.weibo.Status
-import com.cx.weibo.WeiboTime
+
 
 @Composable
 fun StatusCard(status: Status, onClick: (() -> Unit)? = null) {
@@ -120,7 +120,7 @@ private fun Header(status: Status) {
                 fontWeight = FontWeight.SemiBold,
             )
             Text(
-                text = WeiboTime.format(status.createdAt),
+                text = status.displayTime,
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )

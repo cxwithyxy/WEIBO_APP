@@ -44,7 +44,11 @@ private val TABS = listOf(
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun MainTabs(onOpenDetail: (String) -> Unit) {
+fun MainTabs(
+    themeMode: String,
+    onThemeChange: (String) -> Unit,
+    onOpenDetail: (String) -> Unit,
+) {
     var tab by rememberSaveable { mutableIntStateOf(0) }
     var seed by remember { mutableStateOf("") }
 
@@ -85,7 +89,11 @@ fun MainTabs(onOpenDetail: (String) -> Unit) {
                     }
                 )
 
-                else -> ProfileScreen(onOpenDetail = onOpenDetail)
+                else -> ProfileScreen(
+                    themeMode = themeMode,
+                    onThemeChange = onThemeChange,
+                    onOpenDetail = onOpenDetail,
+                )
             }
         }
     }

@@ -45,7 +45,6 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import coil3.compose.AsyncImage
 import com.cx.weibo.Comment
 import com.cx.weibo.Status
-import com.cx.weibo.WeiboTime
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -178,7 +177,7 @@ private fun StatusBody(status: Status, onOpenDetail: (String) -> Unit) {
                     fontWeight = FontWeight.SemiBold,
                 )
                 Text(
-                    status.source ?: WeiboTime.format(status.createdAt),
+                    status.source ?: status.displayTime,
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -232,7 +231,7 @@ private fun StatusBody(status: Status, onOpenDetail: (String) -> Unit) {
 
         Spacer(Modifier.height(14.dp))
         Text(
-            WeiboTime.format(status.createdAt),
+            status.displayTime,
             style = MaterialTheme.typography.labelSmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )

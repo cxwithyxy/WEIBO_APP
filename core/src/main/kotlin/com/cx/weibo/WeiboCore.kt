@@ -73,17 +73,27 @@ data class Status(
             }.getOrDefault(false)
         }
 
-    /** 纯文本（优先 text_raw，其次剥离 HTML 标签） */
-    val plainText: String
-        get() = textRaw ?: text?.replace(Regex("<[^>]+>"), "") ?: ""
+    /** 纯文本（优先 text_raw，其次剥离 HTML 标签）—— 每个实例只算一次 */
+    val plainText: String by lazy {
+        textRaw ?: text?.replace(TAG_RE, "") ?: ""
+    }
 
-    /** 配图 URL（优先 bmiddle 中等尺寸，缺失时按 sinaimg 约定拼接口径） */
-    val imageUrls: List<String>
-        get() = (picIds ?: emptyList()).map { id ->
+    /** 展示用时间 YYYY/MM/DD HH:mm:SS —— 只算一次（避免每次重组都解析日期） */
+    val displayTime: String by lazy { WeiboTime.format(createdAt) }
+
+    /** 配图 URL（优先 bmiddle 中等尺寸）—— 只算一次 */
+    val imageUrls: List<String> by lazy {
+        (picIds ?: emptyList()).map { id ->
             picInfos?.get(id)
                 ?.let { p -> p.bmiddle?.url ?: p.thumbnail?.url ?: p.large?.url }
                 ?: "https://wx1.sinaimg.cn/wap360/$id.jpg"
         }
+    }
+
+    companion object {
+        /** 提前编译，避免每次访问都新建 Regex */
+        private val TAG_RE = Regex("<[^>]+>")
+    }
 }
 
 /** pic_infos 里的单张图片（只取用到的几个尺寸） */
@@ -127,6 +137,13 @@ data class CommentPage(
 
 /** 首页时间线的一页（带下一页游标） */
 data class TimelinePage(
+    val statuses: List<Status>,
+    val nextCursor: String?,
+)
+
+/** 带原始响应文本的一页 —— 供本地缓存复用同一条解析路径 */
+data class TimelineRaw(
+    val raw: String,
     val statuses: List<Status>,
     val nextCursor: String?,
 )
