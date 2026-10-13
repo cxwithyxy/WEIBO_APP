@@ -85,23 +85,24 @@ class WeiboClient(engine: HttpEngine) {
 
     /**
      * 「我的关注」时间线（纯关注，按时间倒序，无推荐/广告）。
-     * 走 `/ajax/feed/friendstimeline` —— 与首页的推荐流是**两个不同的流**（实测）。
+     *
+     * ⚠️ 实测：这个端点的 `since_id` **翻页无效**（第二页与第一页 100% 重叠），
+     * 必须用 `page=N` 翻页（实测零重叠）。所以这里的游标是「下一页页码」。
      */
-    fun followingTimelinePage(sinceId: String = "0", count: Int = 25): TimelinePage =
-        followingTimelinePageRaw(sinceId, count).let { TimelinePage(it.statuses, it.nextCursor) }
-
-    /** 同 followingTimelinePage，但同时返回原始响应文本（用于本地缓存） */
-    fun followingTimelinePageRaw(sinceId: String = "0", count: Int = 25): TimelineRaw {
-        val raw = getJson("/ajax/feed/friendstimeline?since_id=$sinceId&count=$count")
+    fun followingTimelinePageRaw(page: Int = 1, count: Int = 25): TimelineRaw {
+        val raw = getJson("/ajax/feed/friendstimeline?page=$page&count=$count")
         val r = http.gson.fromJson(raw, TimelineResp::class.java)
         checkOk(r?.ok, r?.message, "关注时间线")
-        val list = r?.statuses ?: emptyList()
         return TimelineRaw(
             raw = raw,
-            statuses = list,
-            nextCursor = r?.maxIdStr ?: r?.maxId ?: list.lastOrNull()?.idstr,
+            statuses = r?.statuses ?: emptyList(),
+            nextCursor = (page + 1).toString(),
         )
     }
+
+    /** 只要第一页时用这个 */
+    fun followingTimeline(count: Int = 25): List<Status> =
+        followingTimelinePageRaw(1, count).statuses
 
     /** 某个用户的微博列表（默认自己） */
     fun myBlog(uid: String? = null, page: Int = 1): List<Status> {

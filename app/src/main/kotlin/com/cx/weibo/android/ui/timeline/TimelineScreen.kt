@@ -49,14 +49,17 @@ fun TimelineScreen(
     val ui by vm.ui.collectAsStateWithLifecycle()
     val listState = rememberLazyListState()
 
-    val nearBottom by remember {
-        derivedStateOf {
+    // 触底加载：改成**持续监听可见下标**，而不是「布尔值的边沿」——
+    // 旧写法（LaunchedEffect(nearBottom)）到底后只触发一次，之后就再也不加载了（踩过）。
+    LaunchedEffect(listState) {
+        snapshotFlow {
             val info = listState.layoutInfo
             val last = info.visibleItemsInfo.lastOrNull()?.index ?: -1
-            info.totalItemsCount > 0 && last >= info.totalItemsCount - 3
+            last to info.totalItemsCount
+        }.collect { (last, total) ->
+            if (last >= 0 && total > 0 && last >= total - 3) vm.loadMore()
         }
     }
-    LaunchedEffect(nearBottom) { if (nearBottom) vm.loadMore() }
 
     // 重开后跳回上次阅读的位置（每条流各记一份）
     // 关键：要等列表**真正布局出来**再滚 —— 否则同一帧里的 scrollToItem

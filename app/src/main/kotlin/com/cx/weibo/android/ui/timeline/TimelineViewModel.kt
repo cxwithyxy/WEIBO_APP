@@ -8,6 +8,7 @@ import com.cx.weibo.Status
 import com.cx.weibo.TimelineRaw
 import com.cx.weibo.WeiboTime
 import com.cx.weibo.android.data.FeedCache
+import com.cx.weibo.android.data.FeedSnapshot
 import com.cx.weibo.android.data.Prefs
 import com.cx.weibo.android.data.WeiboService
 import kotlinx.coroutines.Dispatchers
@@ -79,14 +80,15 @@ class TimelineViewModel(app: Application) : AndroidViewModel(app) {
 
         if (cached != null) {
             // 命中缓存：用**和网络完全相同的解析路径**还原，秒开且能精确回到原位
-            pages = cached
-            val statuses = cached.flatMap { client.parseTimelineRaw(it) }
+            pages = cached.pages
+            val statuses = cached.pages.flatMap { client.parseTimelineRaw(it) }
             if (statuses.isNotEmpty()) {
                 _ui.value = TimelineUiState(
                     kind = kind,
                     raw = statuses,
                     items = applyFilter(statuses, FilterState()),
                     anchorId = anchor,
+                    cursor = cached.cursor,   // ⚠ 必须还原，否则「加载更多」断掉
                 )
                 return
             }
@@ -116,13 +118,13 @@ class TimelineViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch {
             val res = withContext(Dispatchers.IO) {
                 runCatching {
-                    val p = fetchPage("0")
+                    val p = fetchPage(null)
                     LoadResult(p.statuses, applyFilter(p.statuses, _ui.value.filter), p.nextCursor) to listOf(p.raw)
                 }
             }
             res.onSuccess { (r, rawPages) ->
                 pages = rawPages
-                persist()
+                persist(r.cursor)
                 _ui.update {
                     it.copy(
                         raw = r.raw,
@@ -144,13 +146,13 @@ class TimelineViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch {
             val res = withContext(Dispatchers.IO) {
                 runCatching {
-                    val p = fetchPage("0")
+                    val p = fetchPage(null)
                     LoadResult(p.statuses, applyFilter(p.statuses, _ui.value.filter), p.nextCursor) to listOf(p.raw)
                 }
             }
             res.onSuccess { (r, rawPages) ->
                 pages = rawPages
-                persist()
+                persist(r.cursor)
                 _ui.update {
                     it.copy(
                         raw = r.raw,
@@ -188,7 +190,7 @@ class TimelineViewModel(app: Application) : AndroidViewModel(app) {
             }
             res.onSuccess { m ->
                 pages = pages + m.rawPage
-                persist()
+                persist(m.load.cursor)
                 _ui.update {
                     it.copy(
                         raw = m.load.raw,
@@ -206,15 +208,17 @@ class TimelineViewModel(app: Application) : AndroidViewModel(app) {
 
     // ---------------- 内部 ----------------
 
-    private fun persist() {
+    private fun persist(cursor: String? = _ui.value.cursor) {
         val kind = _ui.value.kind ?: return
-        FeedCache.save(ctx, kind.name, pages)
+        FeedCache.save(ctx, kind.name, FeedSnapshot(pages, cursor))
     }
 
-    private fun fetchPage(sinceId: String): TimelineRaw =
+    private fun fetchPage(cursor: String?): TimelineRaw =
         when (_ui.value.kind) {
-            FeedKind.FOLLOWING -> client.followingTimelinePageRaw(sinceId = sinceId)
-            else -> client.homeTimelinePageRaw(sinceId = sinceId, count = 20)
+            // 关注流：游标是「下一页页码」（它的 since_id 翻页实测无效）
+            FeedKind.FOLLOWING -> client.followingTimelinePageRaw(page = cursor?.toIntOrNull() ?: 1)
+            // 推荐流：游标是 since_id（实测零重叠）
+            else -> client.homeTimelinePageRaw(sinceId = cursor ?: "0", count = 20)
         }
 
     /** 过滤 + 一律按时间倒序（最新在最上面） */

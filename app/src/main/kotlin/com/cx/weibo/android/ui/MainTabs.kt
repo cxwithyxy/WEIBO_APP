@@ -10,12 +10,14 @@ import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Star
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -47,13 +49,34 @@ private val TABS = listOf(
 fun MainTabs(
     themeMode: String,
     onThemeChange: (String) -> Unit,
+    onExit: () -> Unit,
     onOpenDetail: (String) -> Unit,
 ) {
     var tab by rememberSaveable { mutableIntStateOf(0) }
     var seed by remember { mutableStateOf("") }
+    var showExit by remember { mutableStateOf(false) }
 
-    // 返回键：不在首页时先回首页，而不是退出 App
-    BackHandler(enabled = tab != 0) { tab = 0 }
+    // 返回键：不在首页先回首页；已在首页则弹确认退出
+    BackHandler(enabled = true) {
+        if (tab != 0) tab = 0 else showExit = true
+    }
+
+    if (showExit) {
+        AlertDialog(
+            onDismissRequest = { showExit = false },
+            title = { Text("退出") },
+            text = { Text("确定要退出微博客户端吗？") },
+            confirmButton = {
+                TextButton(onClick = {
+                    showExit = false
+                    onExit()
+                }) { Text("退出") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showExit = false }) { Text("取消") }
+            },
+        )
+    }
 
     Scaffold(
         topBar = { TopAppBar(title = { Text(TABS[tab].title) }) },

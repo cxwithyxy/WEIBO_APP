@@ -4,6 +4,7 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
@@ -27,6 +28,7 @@ import com.cx.weibo.android.ui.theme.WeiboTheme
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        val activity = this
         setContent {
             val ctx = LocalContext.current
             var themeMode by remember { mutableStateOf(Prefs.themeMode(ctx)) }
@@ -39,6 +41,7 @@ class MainActivity : ComponentActivity() {
                             Prefs.setThemeMode(ctx, it)
                             themeMode = it
                         },
+                        onExit = { activity.finish() },
                     )
                 }
             }
@@ -50,6 +53,7 @@ class MainActivity : ComponentActivity() {
 private fun AppRoot(
     themeMode: String,
     onThemeChange: (String) -> Unit,
+    onExit: () -> Unit,
 ) {
     val loginVm: LoginViewModel = viewModel()
     val state by loginVm.state.collectAsStateWithLifecycle()
@@ -59,23 +63,30 @@ private fun AppRoot(
         return
     }
 
-    // 极简导航：详情页是覆盖层，返回键先关详情
     var detailMid by remember { mutableStateOf<String?>(null) }
     val mid = detailMid
 
-    BackHandler(enabled = mid != null) { detailMid = null }
-
-    if (mid != null) {
-        StatusDetailScreen(
-            mid = mid,
-            onBack = { detailMid = null },
-            onOpenDetail = { detailMid = it },
-        )
-    } else {
+    // 关键：详情页用**覆盖**而不是替换 —— 否则 MainTabs 会被销毁重建，
+    // LazyListState 丢失，返回列表就跳到顶部了。
+    Box(Modifier.fillMaxSize()) {
         MainTabs(
             themeMode = themeMode,
             onThemeChange = onThemeChange,
+            onExit = onExit,
             onOpenDetail = { detailMid = it },
         )
+
+        if (mid != null) {
+            Surface(Modifier.fillMaxSize()) {
+                StatusDetailScreen(
+                    mid = mid,
+                    onBack = { detailMid = null },
+                    onOpenDetail = { detailMid = it },
+                )
+            }
+        }
     }
+
+    // 注册在 MainTabs 之后 → 优先生效，先关详情
+    BackHandler(enabled = mid != null) { detailMid = null }
 }

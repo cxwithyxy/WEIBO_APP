@@ -17,6 +17,10 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -26,6 +30,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
 import com.cx.weibo.Status
+import com.cx.weibo.android.ui.common.ImageViewerDialog
 
 
 @Composable
@@ -47,21 +52,31 @@ fun StatusCard(status: Status, onClick: (() -> Unit)? = null) {
         )
 
         val images = status.imageUrls
+        var viewerAt by remember { mutableStateOf<Int?>(null) }
         if (images.isNotEmpty()) {
             Spacer(Modifier.height(8.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                images.take(3).forEach { url ->
+                images.take(9).forEachIndexed { idx, url ->
                     AsyncImage(
                         model = url,
                         contentDescription = null,
                         modifier = Modifier
                             .size(100.dp)
                             .clip(RoundedCornerShape(6.dp))
-                            .background(MaterialTheme.colorScheme.surfaceVariant),
+                            .background(MaterialTheme.colorScheme.surfaceVariant)
+                            .clickable { viewerAt = idx },
                         contentScale = ContentScale.Crop,
                     )
                 }
             }
+        }
+
+        viewerAt?.let { at ->
+            ImageViewerDialog(
+                urls = images,
+                startIndex = at,
+                onDismiss = { viewerAt = null },
+            )
         }
 
         status.retweetedStatus?.let { rt ->

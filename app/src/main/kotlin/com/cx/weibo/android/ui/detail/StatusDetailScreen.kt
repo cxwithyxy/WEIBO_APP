@@ -31,9 +31,11 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -45,6 +47,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import coil3.compose.AsyncImage
 import com.cx.weibo.Comment
 import com.cx.weibo.Status
+import com.cx.weibo.android.ui.common.ImageViewerDialog
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -188,25 +191,35 @@ private fun StatusBody(status: Status, onOpenDetail: (String) -> Unit) {
         Text(status.plainText, style = MaterialTheme.typography.bodyLarge)
 
         val images = status.imageUrls
+        var viewerAt by remember { mutableStateOf<Int?>(null) }
         if (images.isNotEmpty()) {
             Spacer(Modifier.height(12.dp))
             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                images.chunked(3).forEach { row ->
+                images.chunked(3).forEachIndexed { r, row ->
                     Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                        row.forEach { url ->
+                        row.forEachIndexed { c, url ->
                             AsyncImage(
                                 model = url,
                                 contentDescription = null,
                                 modifier = Modifier
                                     .size(110.dp)
                                     .clip(RoundedCornerShape(6.dp))
-                                    .background(MaterialTheme.colorScheme.surfaceVariant),
+                                    .background(MaterialTheme.colorScheme.surfaceVariant)
+                                    .clickable { viewerAt = r * 3 + c },
                                 contentScale = ContentScale.Crop,
                             )
                         }
                     }
                 }
             }
+        }
+
+        viewerAt?.let { at ->
+            ImageViewerDialog(
+                urls = images,
+                startIndex = at,
+                onDismiss = { viewerAt = null },
+            )
         }
 
         status.retweetedStatus?.let { rt ->
