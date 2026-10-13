@@ -223,18 +223,22 @@ class WeiboHttp(
 
     val gson: Gson = Gson()
 
-    private val values = LinkedHashMap<String, String>()   // name -> value
-    private val domains = HashMap<String, String>()        // name -> domain
+    // cookie 罐：**必须按 (域名, 名字) 做键**。
+    // 微博 SSO 链会在 .weibo.com / .sina.com.cn / .sina.cn / .weibo.cn 上
+    // 依次下发同名 SUB，只按名字存会互相覆盖，导致 weibo.com 拿不到登录态。
+    private data class CookieKey(val domain: String, val name: String)
+
+    private val jar = LinkedHashMap<CookieKey, String>()
 
     // ---------------- cookie ----------------
 
     private fun cookieHeader(host: String): String =
-        values.entries
-            .filter { (name, _) ->
-                val d = (domains[name] ?: host).removePrefix(".")
+        jar.entries
+            .filter { (k, _) ->
+                val d = k.domain.removePrefix(".")
                 host == d || host.endsWith(".$d")
             }
-            .joinToString("; ") { "${it.key}=${it.value}" }
+            .joinToString("; ") { "${it.key.name}=${it.value}" }
 
     private fun absorb(host: String, resp: RawResponse) {
         resp.headerValues("Set-Cookie").forEach { raw ->
@@ -244,13 +248,15 @@ class WeiboHttp(
             if (i <= 0) return@forEach
             val name = kv.substring(0, i).trim()
             val value = kv.substring(i + 1).trim()
-            val dom = seg.drop(1)
-                .map { it.trim() }
-                .firstOrNull { it.startsWith("domain=", ignoreCase = true) }
+            val attrs = seg.drop(1).map { it.trim() }
+            val dom = attrs.firstOrNull { it.startsWith("domain=", ignoreCase = true) }
                 ?.substringAfter('=')?.trim()
                 ?: host
-            values[name] = value
-            domains[name] = dom
+
+            val key = CookieKey(dom, name)
+            val deleted = value.equals("deleted", ignoreCase = true) ||
+                attrs.any { (it.startsWith("expires=", true) && it.contains("1970")) || it.startsWith("max-age=0", true) }
+            if (deleted) jar.remove(key) else jar[key] = value
         }
     }
 
@@ -319,15 +325,16 @@ class WeiboHttp(
 
     // ---------------- 会话状态 ----------------
 
-    fun cookieValue(name: String): String? = values[name]
+    fun cookieValue(name: String): String? =
+        jar.entries.firstOrNull { it.key.name == name }?.value
 
-    fun cookieHeaderString(): String = values.entries.joinToString("; ") { "${it.key}=${it.value}" }
+    fun cookieHeaderString(): String = jar.entries.joinToString("; ") { "${it.key.name}=${it.value}" }
 
-    fun isLoggedIn(): Boolean = !values["SUB"].isNullOrEmpty()
+    fun isLoggedIn(): Boolean = jar.keys.any { it.name == "SUB" }
 
     /** 保存 cookie（TSV：domain \t path \t name \t value） */
     fun saveCookies(path: Path) {
-        val lines = values.entries.map { (n, v) -> listOf(domains[n] ?: "", "/", n, v).joinToString("\t") }
+        val lines = jar.entries.map { (k, v) -> listOf(k.domain, "/", k.name, v).joinToString("\t") }
         path.parent?.let { Files.createDirectories(it) }
         Files.write(path, lines)
     }
@@ -342,9 +349,9 @@ class WeiboHttp(
             else if (line.startsWith("#")) return@forEach
             val p = line.split("\t")
             if (p.size >= 7) {                 // Netscape 格式
-                values[p[5]] = p[6]; domains[p[5]] = p[0]
+                jar[CookieKey(p[0], p[5])] = p[6]
             } else if (p.size >= 4) {          // 本库 TSV 格式
-                values[p[2]] = p[3]; domains[p[2]] = p[0]
+                jar[CookieKey(p[0], p[2])] = p[3]
             }
         }
     }
