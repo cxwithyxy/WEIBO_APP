@@ -1,5 +1,6 @@
 package com.cx.weibo
 
+import com.cx.weibo.http.HttpEngine
 import java.nio.file.Path
 
 /**
@@ -14,7 +15,9 @@ import java.nio.file.Path
  *
  * 设计说明：接口层全部集中在此，微博前端一改只动这里（隔离变更风险）。
  */
-class WeiboClient(val http: WeiboHttp = WeiboHttp()) {
+class WeiboClient(engine: HttpEngine) {
+
+    val http: WeiboHttp = WeiboHttp(engine)
 
     val auth = WeiboAuth(http)
 

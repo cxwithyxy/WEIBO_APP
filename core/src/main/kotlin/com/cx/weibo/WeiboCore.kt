@@ -1,16 +1,15 @@
 package com.cx.weibo
 
+import com.cx.weibo.http.HttpEngine
+import com.cx.weibo.http.RawRequest
+import com.cx.weibo.http.RawResponse
 import com.google.gson.Gson
 import com.google.gson.annotations.SerializedName
 import java.net.URI
 import java.net.URLEncoder
-import java.net.http.HttpClient
-import java.net.http.HttpRequest
-import java.net.http.HttpResponse
 import java.nio.charset.StandardCharsets
 import java.nio.file.Files
 import java.nio.file.Path
-import java.time.Duration
 
 const val DESKTOP_UA =
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
@@ -181,17 +180,15 @@ internal data class HotBandData(@SerializedName("band_list") val bandList: List<
 // 而微博登录恰恰依赖跨跳转的 Set-Cookie，所以必须自己接管。
 // ------------------------------------------------------------------
 
-class WeiboHttp(val ua: String = DESKTOP_UA) {
+class WeiboHttp(
+    private val engine: HttpEngine,
+    val ua: String = DESKTOP_UA,
+) {
 
     val gson: Gson = Gson()
 
     private val values = LinkedHashMap<String, String>()   // name -> value
     private val domains = HashMap<String, String>()        // name -> domain
-
-    private val client: HttpClient = HttpClient.newBuilder()
-        .followRedirects(HttpClient.Redirect.NEVER)
-        .connectTimeout(Duration.ofSeconds(20))
-        .build()
 
     // ---------------- cookie ----------------
 
@@ -203,8 +200,8 @@ class WeiboHttp(val ua: String = DESKTOP_UA) {
             }
             .joinToString("; ") { "${it.key}=${it.value}" }
 
-    private fun absorb(host: String, headers: java.net.http.HttpHeaders) {
-        headers.allValues("Set-Cookie").forEach { raw ->
+    private fun absorb(host: String, resp: RawResponse) {
+        resp.headerValues("Set-Cookie").forEach { raw ->
             val seg = raw.split(";")
             val kv = seg[0].trim()
             val i = kv.indexOf('=')
@@ -229,26 +226,24 @@ class WeiboHttp(val ua: String = DESKTOP_UA) {
 
     private fun raw(url: String, method: String, body: String?, referer: String?, ajax: Boolean): Res {
         val uri = URI.create(url)
-        val b = HttpRequest.newBuilder(uri).timeout(Duration.ofSeconds(25))
-            .header("User-Agent", ua)
-            .header("Accept-Language", "zh-CN,zh;q=0.9")
-            .header(
+        val headers = buildMap {
+            put("User-Agent", ua)
+            put("Accept-Language", "zh-CN,zh;q=0.9")
+            put(
                 "Accept",
                 if (ajax) "application/json, text/plain, */*"
                 else "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
             )
-        cookieHeader(uri.host).takeIf { it.isNotEmpty() }?.let { b.header("Cookie", it) }
-        referer?.let { b.header("Referer", it) }
-        if (ajax) b.header("X-Requested-With", "XMLHttpRequest")
-        if (body != null) {
-            b.header("Content-Type", "application/x-www-form-urlencoded")
-            b.method(method, HttpRequest.BodyPublishers.ofString(body, StandardCharsets.UTF_8))
-        } else {
-            b.method(method, HttpRequest.BodyPublishers.noBody())
+            cookieHeader(uri.host).takeIf { it.isNotEmpty() }?.let { put("Cookie", it) }
+            referer?.let { put("Referer", it) }
+            if (ajax) put("X-Requested-With", "XMLHttpRequest")
+            if (body != null) put("Content-Type", "application/x-www-form-urlencoded")
         }
-        val r = client.send(b.build(), HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8))
-        absorb(uri.host, r.headers())
-        return Res(r.statusCode(), r.headers().firstValue("Location").orElse(null), r.body())
+        val resp = engine.execute(
+            RawRequest(url, method, headers, body?.toByteArray(StandardCharsets.UTF_8))
+        )
+        absorb(uri.host, resp)
+        return Res(resp.status, resp.header("Location"), resp.bodyText)
     }
 
     /** GET，自动跟随最多 10 跳重定向，每跳都吸收 Set-Cookie */

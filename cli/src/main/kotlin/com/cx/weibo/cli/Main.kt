@@ -2,6 +2,7 @@ package com.cx.weibo.cli
 
 import com.cx.weibo.QrStatus
 import com.cx.weibo.WeiboClient
+import com.cx.weibo.http.JvmHttpEngine
 import java.net.URI
 import java.nio.file.Files
 import java.nio.file.Path
@@ -12,7 +13,7 @@ private val COOKIE: Path = DIR.resolve("cookies.tsv")
 
 fun main(args: Array<String>) {
     val cmd = args.firstOrNull() ?: "help"
-    val client = WeiboClient()
+    val client = WeiboClient(JvmHttpEngine())
     try {
         when (cmd) {
             "login"     -> login(client)
