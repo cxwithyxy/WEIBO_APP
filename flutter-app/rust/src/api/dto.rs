@@ -274,3 +274,36 @@ impl From<&HotBandItem> for HotBandItemDto {
         }
     }
 }
+
+// ------------------------------------------------------------------ 本地缓存用
+
+/// 一页时间线 + 服务端响应**原文**。
+///
+/// 原文用于本地缓存：重开 App 时用 `parseTimelineRaw` 把缓存原文解析回列表，
+/// 走的是**和网络路径完全相同的解析代码**（原 Android 版 `FeedCache` 就是这个思路 ——
+/// 存解析结果会因 core 换实现而失效，存原文不会）。
+#[derive(Debug, Clone, Default)]
+pub struct TimelineRawDto {
+    pub raw: String,
+    pub statuses: Vec<StatusDto>,
+    pub next_cursor: Option<String>,
+}
+
+impl From<TimelineRaw> for TimelineRawDto {
+    fn from(p: TimelineRaw) -> Self {
+        Self {
+            raw: p.raw,
+            statuses: p.statuses.iter().map(StatusDto::from).collect(),
+            next_cursor: p.next_cursor,
+        }
+    }
+}
+
+/// 单条微博：响应**原文** + 解析结果。
+///
+/// 原文按微博 id 存盘（`status/<id>.json`），下次打开详情页可直接用缓存先渲染。
+#[derive(Debug, Clone, Default)]
+pub struct StatusRawDto {
+    pub raw: String,
+    pub status: Option<StatusDto>,
+}

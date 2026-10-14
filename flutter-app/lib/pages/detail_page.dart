@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../data/cache.dart';
 import '../src/rust/api/dto.dart';
 import '../src/rust/api/weibo.dart' as api;
 import '../widgets/actions.dart';
@@ -50,11 +51,26 @@ class _DetailPageState extends State<DetailPage> with SingleTickerProviderStateM
 
   Future<void> _load() async {
     setState(() => _error = null);
+
+    // 1) 先用缓存渲染（缓存按**微博 id** 存，命中就是秒开）
+    final cached = await StatusCache.load(widget.mid);
+    if (cached != null && mounted) {
+      try {
+        final r = await api.parseStatusRaw(raw: cached);
+        if (r.status != null && mounted) setState(() => _status = r.status);
+      } catch (_) {
+        // 缓存解析失败就丢掉，走网络
+      }
+    }
+
+    // 2) 再回网络刷新，并把**响应原文**存进缓存（下次秒开）
     try {
-      final s = await api.statusDetail(mid: widget.mid);
-      if (mounted) setState(() => _status = s);
+      final r = await api.statusDetailRaw(mid: widget.mid);
+      if (r.status != null && mounted) setState(() => _status = r.status);
+      if (r.raw.isNotEmpty) await StatusCache.save(widget.mid, r.raw);
     } catch (e) {
-      if (mounted) setState(() => _error = e);
+      // 已有缓存时网络失败不覆盖屏幕
+      if (mounted && _status == null) setState(() => _error = e);
     }
   }
 

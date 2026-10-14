@@ -14,7 +14,23 @@
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 
-pub const DESKTOP_UA: &str = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36";
+/// 桌面 Chrome UA。
+///
+/// 背景：本项目的接口全是 `weibo.com/ajax/*`（**桌面网页端**接口，配 Referer +
+/// X-Requested-With 用），所以桌面 UA 与接口语义最一致 —— 原 Kotlin 版用的就是这个。
+pub const DESKTOP_UA: &str =
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36";
+
+/// Android Chrome UA。
+///
+/// 用户担心风控/限频，要求换成安卓 Chrome。留成常量方便随时切。
+/// 注意风险：我们的端点是**桌面网页端**的，UA 写成 Android 而打的又是桌面接口，
+/// 语义上反而不一致（真实客户端不会这样），需实测确认不影响可用性。
+pub const ANDROID_UA: &str =
+    "Mozilla/5.0 (Linux; Android 15; SM-A5360 Build/UP1A.231005.007) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36";
+
+/// 当前实际使用的 UA（改这一个开关就能切换）
+pub const DEFAULT_UA: &str = DESKTOP_UA;
 pub const HOST_WEIBO: &str = "https://weibo.com";
 pub const HOST_PASSPORT: &str = "https://passport.weibo.com";
 
@@ -219,7 +235,7 @@ impl WeiboHttp {
             engine,
             inner: Mutex::new(Inner {
                 jar: Vec::new(),
-                ua: ua.unwrap_or_else(|| DESKTOP_UA.to_string()),
+                ua: ua.unwrap_or_else(|| DEFAULT_UA.to_string()),
             }),
         })
     }

@@ -252,6 +252,20 @@ impl WeiboClient {
             .map_err(|e| WeiboError::protocol(format!("详情解析失败: {e}（{}）", &json[..json.len().min(120)])))
     }
 
+    /// 单条微博详情的**响应原文**（用于按微博 id 做本地缓存）。
+    ///
+    /// 和 `status_detail` 走同一个端点 + 同一套解析，只是把原文交出去，
+    /// 好让上层缓存后能用**相同的解析路径**重放（对应 `parse_status_raw`）。
+    pub fn status_detail_raw(&self, mid: String) -> Result<String, WeiboError> {
+        self.get_json(format!("/ajax/statuses/show?id={mid}"))
+    }
+
+    /// 把缓存的详情原文解析回 `Status`（与网络路径同一套解析）
+    pub fn parse_status_raw(&self, raw: String) -> Result<Status, WeiboError> {
+        serde_json::from_str::<Status>(&raw)
+            .map_err(|e| WeiboError::protocol(format!("缓存详情解析失败: {e}")))
+    }
+
     /// 评论列表。
     ///
     /// ⚠️ 实测：`count` 被忽略（固定 20 条）；`flow=0` 按热度**翻页无效**；

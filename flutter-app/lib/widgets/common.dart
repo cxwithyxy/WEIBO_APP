@@ -1,6 +1,8 @@
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 
 import '../src/rust/api/error.dart';
+import '../src/rust/api/weibo.dart' as api;
 
 /// 平台无关的 int64 展示 Helper。
 ///
@@ -233,10 +235,16 @@ class _ImageViewerState extends State<_ImageViewer> {
           minScale: 1,
           maxScale: 5,
           child: Center(
-            child: Image.network(
-              widget.urls[i],
+            // ⚠ 必须换成大图 URL：列表里的配图是中等尺寸（bmiddle），
+            // 直接放大就糊 —— 第一版漏了这一步（原 Compose 版用的 weiboImageLarge）。
+            child: CachedNetworkImage(
+              imageUrl: api.imageLarge(url: widget.urls[i]),
               fit: BoxFit.contain,
-              errorBuilder: (_, _, _) => const Icon(
+              placeholder: (_, _) => CachedNetworkImage(
+                imageUrl: widget.urls[i],
+                fit: BoxFit.contain,
+              ),
+              errorWidget: (_, _, _) => const Icon(
                 Icons.broken_image_outlined,
                 color: Colors.white54,
                 size: 64,

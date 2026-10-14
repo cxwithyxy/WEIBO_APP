@@ -203,3 +203,49 @@ Future<String> postStatus({required String content, required int visible}) =>
       content: content,
       visible: visible,
     );
+
+/// 缩略图 URL → 大图 URL（对应 core 的 `weibo_image_large` / 原 Kotlin 版 `WeiboImages.large`）。
+///
+/// 配图网格用中等尺寸就够（core 的 `image_urls` 优先 bmiddle），
+/// 但**全屏查看器必须换成 /large/**，否则放大会糊 —— 第一版我漏了这一步。
+///
+/// 纯字符串处理，不碰网络，所以是同步函数。
+String imageLarge({required String url}) =>
+    RustLib.instance.api.crateApiWeiboImageLarge(url: url);
+
+/// 首页时间线一页 + **响应原文**（原文给上层缓存）
+Future<TimelineRawDto> homeTimelinePageRaw({
+  required String sinceId,
+  required int count,
+}) => RustLib.instance.api.crateApiWeiboHomeTimelinePageRaw(
+  sinceId: sinceId,
+  count: count,
+);
+
+/// 关注时间线一页 + 响应原文
+Future<TimelineRawDto> followingTimelinePageRaw({
+  required int page,
+  required int count,
+}) => RustLib.instance.api.crateApiWeiboFollowingTimelinePageRaw(
+  page: page,
+  count: count,
+);
+
+/// 某用户微博一页 + 响应原文
+Future<TimelineRawDto> userTimelinePageRaw({
+  required String uid,
+  required int page,
+}) =>
+    RustLib.instance.api.crateApiWeiboUserTimelinePageRaw(uid: uid, page: page);
+
+/// 把缓存的响应原文解析回列表（走 core 里**与网络路径同一套**的解析代码）
+Future<List<StatusDto>> parseTimelineRaw({required String raw}) =>
+    RustLib.instance.api.crateApiWeiboParseTimelineRaw(raw: raw);
+
+/// 单条微博详情 + **响应原文**（原文按 id 存盘，下次可先用缓存渲染）
+Future<StatusRawDto> statusDetailRaw({required String mid}) =>
+    RustLib.instance.api.crateApiWeiboStatusDetailRaw(mid: mid);
+
+/// 把缓存的详情原文解析回微博对象
+Future<StatusRawDto> parseStatusRaw({required String raw}) =>
+    RustLib.instance.api.crateApiWeiboParseStatusRaw(raw: raw);

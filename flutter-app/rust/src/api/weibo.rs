@@ -22,7 +22,7 @@ use weibo_core::reqwest_engine::ReqwestEngine;
 
 use crate::api::dto::{
     CommentDto, CommentPageDto, HotBandItemDto, HotItemDto, QrSessionDto, QrStatusDto, StatusDto,
-    TimelinePageDto, UserDto,
+    StatusRawDto, TimelinePageDto, TimelineRawDto, UserDto,
 };
 use crate::api::error::WeiboFailure;
 
@@ -405,6 +405,103 @@ pub async fn destroy_status(id: String) -> Result<(), WeiboFailure> {
 pub async fn post_status(content: String, visible: u32) -> Result<String, WeiboFailure> {
     let c = client()?;
     on_blocking_pool(move || c.post_status(content, visible).map_err(WeiboFailure::from)).await
+}
+
+// ------------------------------------------------------------------ 图片工具
+
+/// 缩略图 URL → 大图 URL（对应 core 的 `weibo_image_large` / 原 Kotlin 版 `WeiboImages.large`）。
+///
+/// 配图网格用中等尺寸就够（core 的 `image_urls` 优先 bmiddle），
+/// 但**全屏查看器必须换成 /large/**，否则放大会糊 —— 第一版我漏了这一步。
+///
+/// 纯字符串处理，不碰网络，所以是同步函数。
+#[flutter_rust_bridge::frb(sync)]
+pub fn image_large(url: String) -> String {
+    weibo_core::weibo_image_large(url)
+}
+
+// ------------------------------------------------------------------ 本地缓存支持
+
+/// 首页时间线一页 + **响应原文**（原文给上层缓存）
+pub async fn home_timeline_page_raw(
+    since_id: String,
+    count: u32,
+) -> Result<TimelineRawDto, WeiboFailure> {
+    let c = client()?;
+    on_blocking_pool(move || {
+        let p = c
+            .home_timeline_page_raw(since_id, count)
+            .map_err(WeiboFailure::from)?;
+        Ok(p.into())
+    })
+    .await
+}
+
+/// 关注时间线一页 + 响应原文
+pub async fn following_timeline_page_raw(
+    page: u32,
+    count: u32,
+) -> Result<TimelineRawDto, WeiboFailure> {
+    let c = client()?;
+    on_blocking_pool(move || {
+        let p = c
+            .following_timeline_page_raw(page, count)
+            .map_err(WeiboFailure::from)?;
+        Ok(p.into())
+    })
+    .await
+}
+
+/// 某用户微博一页 + 响应原文
+pub async fn user_timeline_page_raw(
+    uid: String,
+    page: u32,
+) -> Result<TimelineRawDto, WeiboFailure> {
+    let c = client()?;
+    on_blocking_pool(move || {
+        let p = c
+            .user_timeline_page_raw(uid, page)
+            .map_err(WeiboFailure::from)?;
+        Ok(p.into())
+    })
+    .await
+}
+
+/// 把缓存的响应原文解析回列表（走 core 里**与网络路径同一套**的解析代码）
+pub async fn parse_timeline_raw(raw: String) -> Result<Vec<StatusDto>, WeiboFailure> {
+    let c = client()?;
+    on_blocking_pool(move || {
+        Ok(c.parse_timeline_raw(raw)
+            .iter()
+            .map(StatusDto::from)
+            .collect())
+    })
+    .await
+}
+
+/// 单条微博详情 + **响应原文**（原文按 id 存盘，下次可先用缓存渲染）
+pub async fn status_detail_raw(mid: String) -> Result<StatusRawDto, WeiboFailure> {
+    let c = client()?;
+    on_blocking_pool(move || {
+        let raw = c.status_detail_raw(mid).map_err(WeiboFailure::from)?;
+        // 解析失败不算错误（原文已拿到，照样缓存）
+        let status = c.parse_status_raw(raw.clone()).ok().map(|s| StatusDto::from(&s));
+        Ok(StatusRawDto { raw, status })
+    })
+    .await
+}
+
+/// 把缓存的详情原文解析回微博对象
+pub async fn parse_status_raw(raw: String) -> Result<StatusRawDto, WeiboFailure> {
+    let c = client()?;
+    on_blocking_pool(move || {
+        let s = c.parse_status_raw(raw.clone()).map_err(WeiboFailure::from)?;
+        Ok(StatusRawDto {
+            raw,
+            status: Some(StatusDto::from(&s)),
+        })
+    })
+    .await
 }
 
 // ------------------------------------------------------------------ 回归测试

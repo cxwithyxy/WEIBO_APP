@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../data/cache.dart';
 import '../src/rust/api/dto.dart';
 import '../src/rust/api/weibo.dart' as api;
 import '../widgets/common.dart';
@@ -12,6 +13,11 @@ enum TimelineKind { home, following }
 ///
 ///  - `home`：首页（关注的人 + 推荐），**游标**翻页（`since_id` / `next_cursor`）
 ///  - `following`：纯关注流，时间序；该端点 `since_id` 实测无效，用**页码**翻页
+///
+/// 本地缓存策略（对齐原 Android 版 `FeedCache`）：
+///   1. 进页面先用缓存渲染（秒开，不转圈），再去网络刷新；
+///   2. 每次成功请求把**响应原文**追加进缓存，并一起存下游标；
+///   3. 重开时用 core 的 `parseTimelineRaw` 解析原文 —— 与网络路径同一套解析。
 class TimelinePage extends StatefulWidget {
   const TimelinePage({
     super.key,
@@ -34,6 +40,10 @@ class _TimelinePageState extends State<TimelinePage> with AutomaticKeepAliveClie
   final _items = <StatusDto>[];
   late final ScrollController _scroll = widget.controller ?? ScrollController();
   bool get _ownsScroll => widget.controller == null;
+
+  /// 已缓存的响应原文（一页一条）
+  final _pages = <String>[];
+
   String _cursor = '';
   int _page = 1;
   bool _loading = false;
@@ -43,11 +53,18 @@ class _TimelinePageState extends State<TimelinePage> with AutomaticKeepAliveClie
   @override
   bool get wantKeepAlive => true;
 
+  /// 缓存文件名：home / following
+  String get _feedKey =>
+      widget.kind == TimelineKind.home ? 'home' : 'following';
+
   @override
   void initState() {
     super.initState();
     _scroll.addListener(_onScroll);
-    WidgetsBinding.instance.addPostFrameCallback((_) => refresh());
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      await _loadFromCache();
+      await refresh();
+    });
   }
 
   @override
@@ -63,14 +80,41 @@ class _TimelinePageState extends State<TimelinePage> with AutomaticKeepAliveClie
     }
   }
 
-  Future<TimelinePageDto> _fetch({required bool first}) {
-    if (widget.kind == TimelineKind.home) {
-      return api.homeTimelinePage(
-        sinceId: first ? '' : _cursor,
-        count: 20,
-      );
+  /// 用缓存先渲染（秒开）。缓存里存的是原文，用 core 的解析路径还原。
+  Future<void> _loadFromCache() async {
+    final snap = await FeedCache.load(_feedKey);
+    if (snap == null) return;
+    final all = <StatusDto>[];
+    for (final raw in snap.pages) {
+      try {
+        all.addAll(await api.parseTimelineRaw(raw: raw));
+      } catch (_) {
+        // 单页解析失败就跳过这一页，不拖垮整块缓存
+      }
     }
-    return api.followingTimelinePage(page: first ? 1 : _page, count: 20);
+    if (!mounted || all.isEmpty) return;
+    setState(() {
+      _items
+        ..clear()
+        ..addAll(all);
+      _pages
+        ..clear()
+        ..addAll(snap.pages);
+      _cursor = snap.cursor ?? '';
+      // 缓存里已经有 N 页，页码从 N+1 继续
+      _page = snap.pages.length + 1;
+      _hasMore = true;
+    });
+  }
+
+  Future<void> _persist() =>
+      FeedCache.save(_feedKey, FeedSnapshot(pages: List.of(_pages), cursor: _cursor));
+
+  Future<TimelineRawDto> _fetchRaw({required bool first}) {
+    if (widget.kind == TimelineKind.home) {
+      return api.homeTimelinePageRaw(sinceId: first ? '' : _cursor, count: 20);
+    }
+    return api.followingTimelinePageRaw(page: first ? 1 : _page, count: 20);
   }
 
   Future<void> refresh() async {
@@ -80,20 +124,23 @@ class _TimelinePageState extends State<TimelinePage> with AutomaticKeepAliveClie
       _error = null;
     });
     try {
-      final p = await _fetch(first: true);
+      final p = await _fetchRaw(first: true);
       if (!mounted) return;
       setState(() {
         _items
           ..clear()
           ..addAll(p.statuses);
+        _pages.clear();
+        if (p.raw.isNotEmpty) _pages.add(p.raw);
         _cursor = p.nextCursor ?? '';
         _page = 2;
-        // 关注流按页码翻页，页内有数据就继续
         _hasMore = p.statuses.length >= 20;
       });
+      await _persist();
     } catch (e) {
       if (!mounted) return;
-      setState(() => _error = e);
+      // 有缓存时网络失败不覆盖屏幕（继续看缓存），只提示
+      if (_items.isEmpty) setState(() => _error = e);
     } finally {
       if (mounted) setState(() => _loading = false);
     }
@@ -103,14 +150,16 @@ class _TimelinePageState extends State<TimelinePage> with AutomaticKeepAliveClie
     if (_loading || !_hasMore || _error != null) return;
     setState(() => _loading = true);
     try {
-      final p = await _fetch(first: false);
+      final p = await _fetchRaw(first: false);
       if (!mounted) return;
       setState(() {
         _items.addAll(p.statuses);
+        if (p.raw.isNotEmpty) _pages.add(p.raw);
         _cursor = p.nextCursor ?? _cursor;
         _page += 1;
         _hasMore = p.statuses.isNotEmpty;
       });
+      await _persist();
     } catch (_) {
       if (mounted) setState(() => _hasMore = false);
     } finally {

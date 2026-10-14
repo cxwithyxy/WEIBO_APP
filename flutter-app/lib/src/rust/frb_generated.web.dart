@@ -41,6 +41,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   QrStateDto dco_decode_box_autoadd_qr_state_dto(dynamic raw);
 
   @protected
+  StatusDto dco_decode_box_autoadd_status_dto(dynamic raw);
+
+  @protected
   UserDto dco_decode_box_autoadd_user_dto(dynamic raw);
 
   @protected
@@ -101,6 +104,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   QrStateDto? dco_decode_opt_box_autoadd_qr_state_dto(dynamic raw);
 
   @protected
+  StatusDto? dco_decode_opt_box_autoadd_status_dto(dynamic raw);
+
+  @protected
   UserDto? dco_decode_opt_box_autoadd_user_dto(dynamic raw);
 
   @protected
@@ -122,7 +128,13 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   StatusDto dco_decode_status_dto(dynamic raw);
 
   @protected
+  StatusRawDto dco_decode_status_raw_dto(dynamic raw);
+
+  @protected
   TimelinePageDto dco_decode_timeline_page_dto(dynamic raw);
+
+  @protected
+  TimelineRawDto dco_decode_timeline_raw_dto(dynamic raw);
 
   @protected
   int dco_decode_u_32(dynamic raw);
@@ -153,6 +165,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   QrStateDto sse_decode_box_autoadd_qr_state_dto(SseDeserializer deserializer);
+
+  @protected
+  StatusDto sse_decode_box_autoadd_status_dto(SseDeserializer deserializer);
 
   @protected
   UserDto sse_decode_box_autoadd_user_dto(SseDeserializer deserializer);
@@ -219,6 +234,11 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
+  StatusDto? sse_decode_opt_box_autoadd_status_dto(
+    SseDeserializer deserializer,
+  );
+
+  @protected
   UserDto? sse_decode_opt_box_autoadd_user_dto(SseDeserializer deserializer);
 
   @protected
@@ -240,7 +260,13 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   StatusDto sse_decode_status_dto(SseDeserializer deserializer);
 
   @protected
+  StatusRawDto sse_decode_status_raw_dto(SseDeserializer deserializer);
+
+  @protected
   TimelinePageDto sse_decode_timeline_page_dto(SseDeserializer deserializer);
+
+  @protected
+  TimelineRawDto sse_decode_timeline_raw_dto(SseDeserializer deserializer);
 
   @protected
   int sse_decode_u_32(SseDeserializer deserializer);
@@ -275,6 +301,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   @protected
   void sse_encode_box_autoadd_qr_state_dto(
     QrStateDto self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_box_autoadd_status_dto(
+    StatusDto self,
     SseSerializer serializer,
   );
 
@@ -366,6 +398,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
+  void sse_encode_opt_box_autoadd_status_dto(
+    StatusDto? self,
+    SseSerializer serializer,
+  );
+
+  @protected
   void sse_encode_opt_box_autoadd_user_dto(
     UserDto? self,
     SseSerializer serializer,
@@ -393,8 +431,17 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   void sse_encode_status_dto(StatusDto self, SseSerializer serializer);
 
   @protected
+  void sse_encode_status_raw_dto(StatusRawDto self, SseSerializer serializer);
+
+  @protected
   void sse_encode_timeline_page_dto(
     TimelinePageDto self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_timeline_raw_dto(
+    TimelineRawDto self,
     SseSerializer serializer,
   );
 

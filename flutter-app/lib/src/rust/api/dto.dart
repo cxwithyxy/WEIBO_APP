@@ -7,7 +7,7 @@ import '../frb_generated.dart';
 
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
-// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`
+// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`
 
 class CommentDto {
   final String id;
@@ -291,6 +291,30 @@ class StatusDto {
           retweeted == other.retweeted;
 }
 
+/// 单条微博：响应**原文** + 解析结果。
+///
+/// 原文按微博 id 存盘（`status/<id>.json`），下次打开详情页可直接用缓存先渲染。
+class StatusRawDto {
+  final String raw;
+  final StatusDto? status;
+
+  const StatusRawDto({required this.raw, this.status});
+
+  static Future<StatusRawDto> default_() =>
+      RustLib.instance.api.crateApiDtoStatusRawDtoDefault();
+
+  @override
+  int get hashCode => raw.hashCode ^ status.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is StatusRawDto &&
+          runtimeType == other.runtimeType &&
+          raw == other.raw &&
+          status == other.status;
+}
+
 /// 一页时间线（带下一页游标）。
 ///
 /// 游标语义按端点而异，别搞混：
@@ -314,6 +338,38 @@ class TimelinePageDto {
       identical(this, other) ||
       other is TimelinePageDto &&
           runtimeType == other.runtimeType &&
+          statuses == other.statuses &&
+          nextCursor == other.nextCursor;
+}
+
+/// 一页时间线 + 服务端响应**原文**。
+///
+/// 原文用于本地缓存：重开 App 时用 `parseTimelineRaw` 把缓存原文解析回列表，
+/// 走的是**和网络路径完全相同的解析代码**（原 Android 版 `FeedCache` 就是这个思路 ——
+/// 存解析结果会因 core 换实现而失效，存原文不会）。
+class TimelineRawDto {
+  final String raw;
+  final List<StatusDto> statuses;
+  final String? nextCursor;
+
+  const TimelineRawDto({
+    required this.raw,
+    required this.statuses,
+    this.nextCursor,
+  });
+
+  static Future<TimelineRawDto> default_() =>
+      RustLib.instance.api.crateApiDtoTimelineRawDtoDefault();
+
+  @override
+  int get hashCode => raw.hashCode ^ statuses.hashCode ^ nextCursor.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is TimelineRawDto &&
+          runtimeType == other.runtimeType &&
+          raw == other.raw &&
           statuses == other.statuses &&
           nextCursor == other.nextCursor;
 }
