@@ -16,3 +16,15 @@
 
 # ---- Coil ----
 -dontwarn coil3.**
+
+# ---- JNA（UniFFI 生成的绑定靠它调用 Rust cdylib）----
+# JNA 通过反射注册 native 方法，保留整个包及相关注解
+-keep class com.sun.jna.** { *; }
+-keepclassmembers class * extends com.sun.jna.** { *; }
+-dontwarn java.awt.**
+-keepattributes RuntimeVisibleAnnotations,RuntimeVisibleParameterAnnotations
+
+# ---- UniFFI 生成的绑定 ----
+# 包含 JNA 接口、Structure 定义与 FfiConverter，均依赖反射/注解
+-keep class uniffi.** { *; }
+-keepclassmembers class uniffi.** { *; }

@@ -3,6 +3,11 @@ name = "weibo-core"
 version = "0.1.0"
 edition = "2024"
 
+# 注意：**不要**在这里加 `strip = true`。
+# uniffi 的元数据嵌在 cdylib 里，strip 会一并剥掉，导致 `uniffi-bindgen`
+# 读不出接口定义、生成绑定失败。
+# Android 产物的体积由 AGP 打包阶段的 stripReleaseDebugSymbols 处理，无需在此配置。
+
 [lib]
 name = "weibo_core"
 crate-type = ["cdylib", "lib"]

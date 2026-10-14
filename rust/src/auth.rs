@@ -14,7 +14,7 @@ use std::sync::Arc;
 
 /// 登录页（步骤 1）
 pub fn signin_url() -> String {
-    format!("{HOST_PASSPORT}/sso/signin?entry=wapssso&source=wapssowb")
+    format!("{HOST_PASSPORT}/sso/signin?entry=wapsso&source=wapssowb")
 }
 
 /// 扫码完成后的落地页
@@ -117,7 +117,7 @@ impl WeiboAuth {
 
     /// 步骤 2：取二维码
     pub fn create_qr(&self, size: u32) -> Result<QrSession, WeiboError> {
-        let url = format!("{HOST_PASSPORT}/sso/v2/qrcode/image?entry=wapssso&size={size}");
+        let url = format!("{HOST_PASSPORT}/sso/v2/qrcode/image?entry=wapsso&size={size}");
         let json = self.http.get(url, Some(signin_url()), false)?;
         let r: QrImageResp = serde_json::from_str(&json).unwrap_or_default();
         let d = r.data.ok_or_else(|| {
@@ -142,7 +142,7 @@ impl WeiboAuth {
     /// 步骤 3：轮询一次扫描状态
     pub fn poll(&self, qrid: String) -> Result<QrStatus, WeiboError> {
         let url = format!(
-            "{HOST_PASSPORT}/sso/v2/qrcode/check?entry=wapssso&source=wapssowb\
+            "{HOST_PASSPORT}/sso/v2/qrcode/check?entry=wapsso&source=wapssowb\
              &url={}&qrid={}&disp=&rid=norid&ver={VER}",
             enc(POST_LOGIN_URL),
             enc(&qrid)
@@ -326,7 +326,7 @@ mod tests {
         assert_eq!(st.url.as_deref(), Some("https://passport.weibo.com/cb?x=1"));
         // 轮询 URL 必须带上编码后的 qrid 与落地页
         let u = &e.urls()[0];
-        assert!(u.contains("entry=wapssso"));
+        assert!(u.contains("entry=wapsso"));
         assert!(u.contains("qrid=Q1"));
         assert!(u.contains("ver=20250520"));
         assert!(u.contains(&enc("https://m.weibo.cn/")));
