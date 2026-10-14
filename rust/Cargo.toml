@@ -20,7 +20,18 @@ path = "src/bin/uniffi-bindgen.rs"
 [dependencies]
 chrono = "0.4.45"
 regex = "1.13.1"
-reqwest = { version = "0.13.5", default-features = false, features = ["blocking", "cookies", "json", "rustls", "gzip", "charset"] }
+# TLS 说明（重要，别改回去）：
+# 原来用 feature `rustls`，它会硬绑 `rustls-platform-verifier`（平台证书校验器）。
+# 那个 crate 在 **Android 上必须先初始化**（要 JNI Env + Android Context），否则
+# 内部线程 panic："Expect rustls-platform-verifier to be initialized"，
+# 上层只会看到 reqwest 的 "event loop thread panicked"，极难定位（已踩过）。
+#
+# 改为 `rustls-no-provider` + 自备 TLS 配置（见 reqwest_engine.rs）：
+# 用 **内置的 Mozilla 根证书**（webpki-roots），彻底不碰平台校验器，
+# 不需要任何 JNI/平台胶水，host / Android / iOS 行为一致。
+reqwest = { version = "0.13.5", default-features = false, features = ["blocking", "cookies", "json", "gzip", "charset", "rustls-no-provider"] }
+rustls = { version = "0.23", default-features = false, features = ["std", "tls12", "aws_lc_rs"] }
+webpki-roots = "1"
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.154"
 thiserror = "2.0.21"

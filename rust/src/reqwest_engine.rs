@@ -6,6 +6,14 @@
 //!  - **不跟随重定向** → `Policy::none()`（微博登录依赖逐跳吸收 Set-Cookie）
 //!  - **不管理 cookie** → 不自带 cookie store
 //!  - **不自动重试**
+//!
+//! TLS 说明（重要）：
+//!  - 显式使用 **内置 Mozilla 根证书**（webpki-roots）+ aws-lc-rs provider。
+//!  - 不能改用 reqwest 的 `rustls` feature：它会绑 `rustls-platform-verifier`，
+//!    后者在 Android 上必须先初始化（要 JNI Env + Android Context），
+//!    否则 panic "Expect rustls-platform-verifier to be initialized"，
+//!    且在 reqwest 内部线程里，上层只能看到 "event loop thread panicked"。
+//!  - 自备配置后不依赖任何平台胶水，host / Android / iOS 行为一致。
 
 use crate::http::{HttpEngine, RawRequest, RawResponse, WeiboError};
 use std::collections::HashMap;
@@ -15,6 +23,24 @@ use std::time::Duration;
 #[derive(uniffi::Object)]
 pub struct ReqwestEngine {
     client: reqwest::blocking::Client,
+}
+
+/// 构造使用内置 Mozilla 根证书的 rustls 配置。
+///
+/// 两条都不能省：
+///  - **安装默认 crypto provider**（aws-lc-rs）—— 否则 `ClientConfig::builder()` 会 panic
+///    "no process-level CryptoProvider available"。
+///  - **显式装根证书** —— 不使用平台校验器。
+fn build_tls_config() -> Result<rustls::ClientConfig, WeiboError> {
+    // 幂等：已装过则返回 Err，忽略即可
+    let _ = rustls::crypto::aws_lc_rs::default_provider().install_default();
+
+    let mut roots = rustls::RootCertStore::empty();
+    roots.extend(webpki_roots::TLS_SERVER_ROOTS.iter().cloned());
+
+    Ok(rustls::ClientConfig::builder()
+        .with_root_certificates(roots)
+        .with_no_client_auth())
 }
 
 #[uniffi::export]
@@ -27,9 +53,12 @@ impl ReqwestEngine {
     /// 自定义超时（秒）：connect, request
     #[uniffi::constructor]
     pub fn with_timeouts(connect_secs: u64, request_secs: u64) -> Result<Arc<Self>, WeiboError> {
+        let tls = build_tls_config()?;
         let client = reqwest::blocking::Client::builder()
             // 关键：绝不自动跟随重定向
             .redirect(reqwest::redirect::Policy::none())
+            // 关键：用自备 TLS 配置，绕开平台证书校验器（见文件头说明）
+            .use_preconfigured_tls(tls)
             .connect_timeout(Duration::from_secs(connect_secs))
             .timeout(Duration::from_secs(request_secs))
             .build()
