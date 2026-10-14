@@ -3,7 +3,7 @@
          release 包缺了它会导致所有网络请求直接失败。 -->
     <uses-permission android:name="android.permission.INTERNET"/>
     <application
-        android:label="weibo_flutter"
+        android:label="微博客户端"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
         <activity
