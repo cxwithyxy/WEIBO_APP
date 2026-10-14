@@ -48,6 +48,12 @@ class _UserPageState extends State<UserPage> {
     super.dispose();
   }
 
+  /// 双击顶部回顶部（对齐原 Compose 版 UserScreen 的行为）
+  void _scrollToTop() {
+    if (!_scroll.hasClients) return;
+    _scroll.animateTo(0, duration: const Duration(milliseconds: 300), curve: Curves.easeOut);
+  }
+
   Future<void> _loadProfile() async {
     setState(() => _profileError = null);
     try {
@@ -102,7 +108,18 @@ class _UserPageState extends State<UserPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text(_user?.name ?? '用户'),
+        title: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: _scrollToTop,
+          onDoubleTap: _scrollToTop,
+          child: SizedBox(
+            width: double.infinity,
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: Text(_user?.name ?? '用户'),
+            ),
+          ),
+        ),
         leading: IconButton(
           icon: const Icon(Icons.arrow_back),
           tooltip: '返回',

@@ -7,7 +7,10 @@ import 'search_page.dart';
 
 /// 热搜榜（公开接口，不需要登录）。
 class HotPage extends StatefulWidget {
-  const HotPage({super.key});
+  const HotPage({super.key, this.controller});
+
+  /// 外部传入的滚动控制器（供「双击顶部回顶部」使用）
+  final ScrollController? controller;
 
   @override
   State<HotPage> createState() => _HotPageState();
@@ -16,6 +19,8 @@ class HotPage extends StatefulWidget {
 class _HotPageState extends State<HotPage> with AutomaticKeepAliveClientMixin {
   List<HotItemDto>? _items;
   Object? _error;
+  late final ScrollController _scroll = widget.controller ?? ScrollController();
+  bool get _ownsScroll => widget.controller == null;
 
   @override
   bool get wantKeepAlive => true;
@@ -24,6 +29,12 @@ class _HotPageState extends State<HotPage> with AutomaticKeepAliveClientMixin {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) => _load());
+  }
+
+  @override
+  void dispose() {
+    if (_ownsScroll) _scroll.dispose();
+    super.dispose();
   }
 
   Future<void> _load() async {
@@ -47,6 +58,7 @@ class _HotPageState extends State<HotPage> with AutomaticKeepAliveClientMixin {
     return RefreshIndicator(
       onRefresh: _load,
       child: ListView.separated(
+        controller: _scroll,
         itemCount: items.length,
         separatorBuilder: (_, _) => const Divider(height: 1, indent: 12, endIndent: 12),
         itemBuilder: (context, i) {

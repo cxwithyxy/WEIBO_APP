@@ -19,6 +19,18 @@ Future<void> main() async {
   await api.initClient();
   await Settings.instance.load();
   await Session.instance.bootstrap();
+
+  // 图片内存缓存上限。
+  //
+  // 关于「列表是不是虚拟列表」（用户提问）：
+  //   `ListView.builder` / `ListView.separated` 本身就是**懒加载**的 ——
+  //   只构建视口内（± cacheExtent，默认 250px）的元素并复用 element，
+  //   所以 CPU/构建开销天然被视口大小限制，与列表总长度无关。
+  //   真正会随滚动持续累积的是**图片内存缓存**，所以在这里设个上限。
+  //   默认是 1000 张 / 100MB；feed 场景下调成 200 张更省内存。
+  PaintingBinding.instance.imageCache.maximumSize = 200;
+  PaintingBinding.instance.imageCache.maximumSizeBytes = 64 << 20; // 64MB
+
   runApp(const WeiboApp());
 }
 

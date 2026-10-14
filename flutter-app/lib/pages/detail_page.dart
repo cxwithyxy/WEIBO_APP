@@ -7,6 +7,10 @@ import '../widgets/common.dart';
 import '../widgets/status_card.dart';
 
 /// 微博详情页：正文 + 评论 + 转发。
+///
+/// 「双击顶部回顶部」对齐原 Compose 版（`StatusDetailScreen` 里也给列表挂了
+/// `detectTapGestures(onDoubleTap = { animateScrollToItem(0) })`）——
+/// 所以这里显式持 `TabController`，好知道当前在哪个 tab，再滚对应的列表。
 class DetailPage extends StatefulWidget {
   const DetailPage({super.key, required this.mid});
 
@@ -16,14 +20,32 @@ class DetailPage extends StatefulWidget {
   State<DetailPage> createState() => _DetailPageState();
 }
 
-class _DetailPageState extends State<DetailPage> {
+class _DetailPageState extends State<DetailPage> with SingleTickerProviderStateMixin {
   StatusDto? _status;
   Object? _error;
+
+  late final TabController _tabs = TabController(length: 2, vsync: this);
+  final _commentScroll = ScrollController();
+  final _repostScroll = ScrollController();
 
   @override
   void initState() {
     super.initState();
     _load();
+  }
+
+  @override
+  void dispose() {
+    _tabs.dispose();
+    _commentScroll.dispose();
+    _repostScroll.dispose();
+    super.dispose();
+  }
+
+  void _scrollCurrentToTop() {
+    final c = _tabs.index == 0 ? _commentScroll : _repostScroll;
+    if (!c.hasClients) return;
+    c.animateTo(0, duration: const Duration(milliseconds: 300), curve: Curves.easeOut);
   }
 
   Future<void> _load() async {
@@ -39,40 +61,54 @@ class _DetailPageState extends State<DetailPage> {
   @override
   Widget build(BuildContext context) {
     final s = _status;
-    return DefaultTabController(
-      length: 2,
-      child: Scaffold(
-        appBar: AppBar(
-          title: const Text('微博正文'),
-          leading: IconButton(
-            icon: const Icon(Icons.arrow_back),
-            tooltip: '返回',
-            onPressed: () => Navigator.of(context).maybePop(),
-          ),
-          bottom: const TabBar(
-            tabs: [Tab(text: '评论'), Tab(text: '转发')],
+    return Scaffold(
+      appBar: AppBar(
+        title: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: _scrollCurrentToTop,
+          onDoubleTap: _scrollCurrentToTop,
+          child: const SizedBox(
+            width: double.infinity,
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: Text('微博正文'),
+            ),
           ),
         ),
-        body: Column(
-          children: [
-            if (_error != null)
-              Expanded(child: ErrorView(error: _error!, onRetry: _load))
-            else if (s == null)
-              const Expanded(child: Center(child: CircularProgressIndicator()))
-            else ...[
-              StatusCard(status: s, showActions: false),
-              const Divider(height: 1),
-              Expanded(
-                child: TabBarView(
-                  children: [
-                    _CommentsTab(mid: widget.mid, initialTotal: s.comments),
-                    _RepostsTab(mid: widget.mid),
-                  ],
-                ),
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back),
+          tooltip: '返回',
+          onPressed: () => Navigator.of(context).maybePop(),
+        ),
+        bottom: TabBar(
+          controller: _tabs,
+          tabs: const [Tab(text: '评论'), Tab(text: '转发')],
+        ),
+      ),
+      body: Column(
+        children: [
+          if (_error != null)
+            Expanded(child: ErrorView(error: _error!, onRetry: _load))
+          else if (s == null)
+            const Expanded(child: Center(child: CircularProgressIndicator()))
+          else ...[
+            StatusCard(status: s, showActions: false),
+            const Divider(height: 1),
+            Expanded(
+              child: TabBarView(
+                controller: _tabs,
+                children: [
+                  _CommentsTab(
+                    mid: widget.mid,
+                    initialTotal: s.comments,
+                    controller: _commentScroll,
+                  ),
+                  _RepostsTab(mid: widget.mid, controller: _repostScroll),
+                ],
               ),
-            ],
+            ),
           ],
-        ),
+        ],
       ),
     );
   }
@@ -81,10 +117,15 @@ class _DetailPageState extends State<DetailPage> {
 // ------------------------------------------------------------------ 评论
 
 class _CommentsTab extends StatefulWidget {
-  const _CommentsTab({required this.mid, required this.initialTotal});
+  const _CommentsTab({
+    required this.mid,
+    required this.initialTotal,
+    this.controller,
+  });
 
   final String mid;
   final int initialTotal;
+  final ScrollController? controller;
 
   @override
   State<_CommentsTab> createState() => _CommentsTabState();
@@ -92,7 +133,8 @@ class _CommentsTab extends StatefulWidget {
 
 class _CommentsTabState extends State<_CommentsTab> with AutomaticKeepAliveClientMixin {
   final _items = <CommentDto>[];
-  final _scroll = ScrollController();
+  late final ScrollController _scroll = widget.controller ?? ScrollController();
+  bool get _ownsScroll => widget.controller == null;
   int _maxId = 0;
   int? _total;
   bool _loading = false;
@@ -116,7 +158,7 @@ class _CommentsTabState extends State<_CommentsTab> with AutomaticKeepAliveClien
 
   @override
   void dispose() {
-    _scroll.dispose();
+    if (_ownsScroll) _scroll.dispose();
     super.dispose();
   }
 
@@ -171,7 +213,10 @@ class _CommentsTabState extends State<_CommentsTab> with AutomaticKeepAliveClien
       return RefreshIndicator(
         onRefresh: _load,
         child: ListView(
-          children: const [SizedBox(height: 120), EmptyView(text: '还没有评论', icon: Icons.chat_bubble_outline)],
+          children: const [
+            SizedBox(height: 120),
+            EmptyView(text: '还没有评论', icon: Icons.chat_bubble_outline),
+          ],
         ),
       );
     }
@@ -192,7 +237,7 @@ class _CommentsTabState extends State<_CommentsTab> with AutomaticKeepAliveClien
             );
           }
           if (i == _items.length) return FooterHint(loading: _loading, hasMore: _hasMore);
-          final c = _items[i - 1 - 0];
+          final c = _items[i - 1];
           return _CommentTile(
             comment: c,
             onReply: () => showCommentSheet(
@@ -261,7 +306,9 @@ class _CommentTile extends StatelessWidget {
                       margin: const EdgeInsets.only(bottom: 4),
                       padding: const EdgeInsets.all(6),
                       decoration: BoxDecoration(
-                        color: Colors.grey.shade100,
+                        color: Theme.of(context).brightness == Brightness.dark
+                            ? Colors.white10
+                            : Colors.grey.shade100,
                         borderRadius: BorderRadius.circular(4),
                       ),
                       child: Text(
@@ -299,9 +346,10 @@ class _CommentTile extends StatelessWidget {
 // ------------------------------------------------------------------ 转发
 
 class _RepostsTab extends StatefulWidget {
-  const _RepostsTab({required this.mid});
+  const _RepostsTab({required this.mid, this.controller});
 
   final String mid;
+  final ScrollController? controller;
 
   @override
   State<_RepostsTab> createState() => _RepostsTabState();
@@ -309,7 +357,8 @@ class _RepostsTab extends StatefulWidget {
 
 class _RepostsTabState extends State<_RepostsTab> with AutomaticKeepAliveClientMixin {
   final _items = <StatusDto>[];
-  final _scroll = ScrollController();
+  late final ScrollController _scroll = widget.controller ?? ScrollController();
+  bool get _ownsScroll => widget.controller == null;
   int _page = 1;
   bool _loading = false;
   bool _hasMore = true;
@@ -332,7 +381,7 @@ class _RepostsTabState extends State<_RepostsTab> with AutomaticKeepAliveClientM
 
   @override
   void dispose() {
-    _scroll.dispose();
+    if (_ownsScroll) _scroll.dispose();
     super.dispose();
   }
 
@@ -385,7 +434,10 @@ class _RepostsTabState extends State<_RepostsTab> with AutomaticKeepAliveClientM
       return RefreshIndicator(
         onRefresh: _load,
         child: ListView(
-          children: const [SizedBox(height: 120), EmptyView(text: '还没有转发', icon: Icons.repeat)],
+          children: const [
+            SizedBox(height: 120),
+            EmptyView(text: '还没有转发', icon: Icons.repeat),
+          ],
         ),
       );
     }

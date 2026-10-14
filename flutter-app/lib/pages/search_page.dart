@@ -8,12 +8,15 @@ import 'detail_page.dart';
 
 /// 搜索微博。
 class SearchPage extends StatefulWidget {
-  const SearchPage({super.key, this.initialQuery, this.embedded = false});
+  const SearchPage({super.key, this.initialQuery, this.embedded = false, this.controller});
 
   final String? initialQuery;
 
   /// 作为主界面 tab 内嵌时为 true：不套 Scaffold，搜索框放内容顶部
   final bool embedded;
+
+  /// 外部传入的滚动控制器（供「双击顶部回顶部」使用）
+  final ScrollController? controller;
 
   @override
   State<SearchPage> createState() => _SearchPageState();
@@ -22,7 +25,8 @@ class SearchPage extends StatefulWidget {
 class _SearchPageState extends State<SearchPage> {
   late final TextEditingController _ctrl = TextEditingController(text: widget.initialQuery ?? '');
   final _items = <StatusDto>[];
-  final _scroll = ScrollController();
+  late final ScrollController _scroll = widget.controller ?? ScrollController();
+  bool get _ownsScroll => widget.controller == null;
   int _page = 1;
   bool _loading = false;
   bool _hasMore = true;
@@ -46,7 +50,7 @@ class _SearchPageState extends State<SearchPage> {
   @override
   void dispose() {
     _ctrl.dispose();
-    _scroll.dispose();
+    if (_ownsScroll) _scroll.dispose();
     super.dispose();
   }
 

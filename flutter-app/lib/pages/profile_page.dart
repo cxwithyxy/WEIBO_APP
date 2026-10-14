@@ -6,12 +6,16 @@ import '../src/rust/api/weibo.dart' as api;
 import '../widgets/common.dart';
 import '../widgets/status_card.dart';
 import 'detail_page.dart';
+import 'compose_page.dart';
 
-/// 「我的」页：个人资料 + 我的微博 + 外观设置 + 退出登录。
+/// 「我的」页：个人资料 + 我的微博 + 发微博 + 外观设置 + 退出登录。
 class ProfilePage extends StatefulWidget {
-  const ProfilePage({super.key, required this.onLoggedOut});
+  const ProfilePage({super.key, required this.onLoggedOut, this.controller});
 
   final VoidCallback onLoggedOut;
+
+  /// 外部传入的滚动控制器（供「双击顶部回顶部」使用）
+  final ScrollController? controller;
 
   @override
   State<ProfilePage> createState() => _ProfilePageState();
@@ -22,7 +26,8 @@ class _ProfilePageState extends State<ProfilePage> {
   Object? _profileError;
 
   final _items = <StatusDto>[];
-  final _scroll = ScrollController();
+  late final ScrollController _scroll = widget.controller ?? ScrollController();
+  bool get _ownsScroll => widget.controller == null;
   int _page = 1;
   bool _loading = false;
   bool _hasMore = true;
@@ -45,7 +50,7 @@ class _ProfilePageState extends State<ProfilePage> {
 
   @override
   void dispose() {
-    _scroll.dispose();
+    if (_ownsScroll) _scroll.dispose();
     super.dispose();
   }
 
@@ -214,6 +219,14 @@ class _ProfilePageState extends State<ProfilePage> {
           ),
         const SizedBox(height: 12),
         const Divider(height: 1),
+        // 发微博不常用 → 从悬浮按钮移到「我的」页（用户反馈）
+        ListTile(
+          leading: const Icon(Icons.edit_outlined),
+          title: const Text('发微博'),
+          onTap: () => Navigator.of(context).push(
+            MaterialPageRoute(builder: (_) => const ComposePage()),
+          ),
+        ),
         _appearance(),
         const Divider(height: 1),
         ListTile(

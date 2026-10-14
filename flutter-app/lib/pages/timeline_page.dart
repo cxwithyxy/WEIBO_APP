@@ -13,10 +13,18 @@ enum TimelineKind { home, following }
 ///  - `home`：首页（关注的人 + 推荐），**游标**翻页（`since_id` / `next_cursor`）
 ///  - `following`：纯关注流，时间序；该端点 `since_id` 实测无效，用**页码**翻页
 class TimelinePage extends StatefulWidget {
-  const TimelinePage({super.key, required this.kind, this.onNeedLogin});
+  const TimelinePage({
+    super.key,
+    required this.kind,
+    this.onNeedLogin,
+    this.controller,
+  });
 
   final TimelineKind kind;
   final VoidCallback? onNeedLogin;
+
+  /// 外部传入的滚动控制器（供「双击顶部回顶部」使用）；为空时自建
+  final ScrollController? controller;
 
   @override
   State<TimelinePage> createState() => _TimelinePageState();
@@ -24,7 +32,8 @@ class TimelinePage extends StatefulWidget {
 
 class _TimelinePageState extends State<TimelinePage> with AutomaticKeepAliveClientMixin {
   final _items = <StatusDto>[];
-  final _scroll = ScrollController();
+  late final ScrollController _scroll = widget.controller ?? ScrollController();
+  bool get _ownsScroll => widget.controller == null;
   String _cursor = '';
   int _page = 1;
   bool _loading = false;
@@ -43,7 +52,7 @@ class _TimelinePageState extends State<TimelinePage> with AutomaticKeepAliveClie
 
   @override
   void dispose() {
-    _scroll.dispose();
+    if (_ownsScroll) _scroll.dispose();
     super.dispose();
   }
 
