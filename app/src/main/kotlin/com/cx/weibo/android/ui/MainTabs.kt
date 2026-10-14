@@ -1,8 +1,10 @@
 package com.cx.weibo.android.ui
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.material.icons.Icons
@@ -25,10 +27,13 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.input.pointer.pointerInput
+import kotlinx.coroutines.launch
 import com.cx.weibo.android.ui.hot.HotScreen
 import com.cx.weibo.android.ui.profile.ProfileScreen
 import com.cx.weibo.android.ui.search.SearchScreen
@@ -60,6 +65,17 @@ fun MainTabs(
 
     // 滚动状态提到这里保活 —— 否则切 tab 会重建列表、位置丢失（踩过）
     val feedStates = remember { mutableMapOf<FeedKind, LazyListState>() }
+    val scope = rememberCoroutineScope()
+
+    /** 双击标题栏回到顶部（只对信息流 tab 生效） */
+    fun scrollCurrentToTop() {
+        val st = when (tab) {
+            0 -> feedStates[FeedKind.RECOMMEND]
+            1 -> feedStates[FeedKind.FOLLOWING]
+            else -> null
+        }
+        st?.let { s -> scope.launch { s.animateScrollToItem(0) } }
+    }
 
     BackHandler(enabled = true) {
         if (tab != 0) tab = 0 else showExit = true
@@ -83,7 +99,20 @@ fun MainTabs(
     }
 
     Scaffold(
-        topBar = { TopAppBar(title = { Text(TABS[tab].title) }) },
+        topBar = {
+            TopAppBar(
+                title = {
+                    Text(
+                        TABS[tab].title,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .pointerInput(tab) {
+                                detectTapGestures(onDoubleTap = { scrollCurrentToTop() })
+                            },
+                    )
+                },
+            )
+        },
         bottomBar = {
             NavigationBar {
                 TABS.forEachIndexed { i, t ->

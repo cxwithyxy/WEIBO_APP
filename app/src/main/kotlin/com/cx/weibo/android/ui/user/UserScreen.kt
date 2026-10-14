@@ -1,5 +1,6 @@
 package com.cx.weibo.android.ui.user
 
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -31,11 +32,13 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -45,6 +48,7 @@ import com.cx.weibo.User
 import com.cx.weibo.android.data.WeiboService
 import com.cx.weibo.android.ui.timeline.StatusCard
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 /**
@@ -62,6 +66,7 @@ fun UserScreen(
 ) {
     val client = WeiboService.client
     val listState = rememberLazyListState()
+    val scope = rememberCoroutineScope()
 
     var items by remember { mutableStateOf<List<Status>>(emptyList()) }
     var page by remember { mutableIntStateOf(1) }
@@ -119,7 +124,18 @@ fun UserScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text(user?.screenName ?: name) },
+                title = {
+                    Text(
+                        user?.screenName ?: name,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .pointerInput(Unit) {
+                                detectTapGestures(
+                                    onDoubleTap = { scope.launch { listState.animateScrollToItem(0) } },
+                                )
+                            },
+                    )
+                },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
