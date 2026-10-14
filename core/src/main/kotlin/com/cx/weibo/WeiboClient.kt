@@ -194,6 +194,32 @@ class WeiboClient(engine: HttpEngine) {
         checkMutation(mutation("/ajax/statuses/destroy", linkedMapOf("id" to id), "https://weibo.com/detail/$id"), "删除微博")
     }
 
+    /**
+     * 发微博（纯文字）。返回新微博的 idstr。
+     *
+     * 走 **weibo.com 桌面端**接口，复用现有会话 + CSRF；
+     * （移动端 m.weibo.cn 是另一个域，不认 weibo.com 的 cookie，需单独登录，已避开）
+     * `visible`: 0=公开 1=仅关注 6=仅自己
+     */
+    fun postStatus(content: String, visible: Int = 0): String {
+        val text = content.trim()
+        require(text.isNotEmpty()) { "微博内容不能为空" }
+        val raw = mutation(
+            "/ajax/statuses/update",
+            linkedMapOf("content" to text, "visible" to visible.toString()),
+            "https://weibo.com/",
+        )
+        val obj = runCatching { http.gson.fromJson(raw, com.google.gson.JsonObject::class.java) }
+            .getOrNull() ?: throw WeiboException("发微博失败：响应无法解析（${raw.take(120)}）")
+        val data = obj.getAsJsonObject("data")
+        val ok = obj.get("ok")?.let { runCatching { it.asInt }.getOrNull() }
+        if (data == null || (ok != null && ok != 1)) {
+            val msg = obj.get("msg")?.asString ?: obj.get("message")?.asString ?: raw.take(120)
+            throw WeiboException("发微博失败: ok=$ok $msg")
+        }
+        return data.get("idstr")?.asString ?: data.get("id")?.asString ?: ""
+    }
+
     /** 首页时间线（关注的人）—— 只要第一页时用这个 */
     fun homeTimeline(count: Int = 20, sinceId: String = "0"): List<Status> =
         homeTimelinePage(sinceId, count).statuses

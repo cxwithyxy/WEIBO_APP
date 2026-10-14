@@ -36,6 +36,7 @@ fun main(args: Array<String>) {
             "fav"       -> doFav(client, args.toList())
             "delete"    -> doDelete(client, args.toList())
             "mylatest"  -> doMyLatest(client)
+            "post"      -> doPost(client, args.toList())
             "logout"    -> { Files.deleteIfExists(COOKIE); println("已删除本地 cookie") }
             else        -> usage()
         }
@@ -311,4 +312,20 @@ private fun doMyLatest(client: WeiboClient) {
     println("idstr : ${s.idstr}")
     println("时间  : ${s.createdAt}")
     println("内容  : ${(s.plainText).take(60)}")
+}
+
+/** 发微博（纯文字）。返回新微博 id，便于立即删除 */
+private fun doPost(client: WeiboClient, args: List<String>) {
+    val text = args.drop(1).filter { it != "--yes" }.joinToString(" ").trim()
+    require(text.isNotBlank()) { "内容不能为空" }
+    val visible = when {
+        args.contains("--private") -> 6
+        args.contains("--followers") -> 1
+        else -> 0
+    }
+    if (!needYes(args, "发微博")) return
+    if (!client.restore(COOKIE)) { println("未登录，请先 login"); return }
+    val id = client.postStatus(text, visible)
+    println("✓ 已发布，id=$id")
+    println("  （要删就运行：delete $id --yes）")
 }

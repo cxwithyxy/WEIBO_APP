@@ -18,6 +18,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.cx.weibo.android.data.Prefs
 import com.cx.weibo.android.ui.MainTabs
+import com.cx.weibo.android.ui.compose.ComposeScreen
 import com.cx.weibo.android.ui.detail.StatusDetailScreen
 import com.cx.weibo.android.ui.login.LoginScreen
 import com.cx.weibo.android.ui.login.LoginUiState
@@ -68,6 +69,7 @@ private fun AppRoot(
     //   MainTabs  →  用户微博页  →  微博详情
     var detailMid by remember { mutableStateOf<String?>(null) }
     var userOpen by remember { mutableStateOf<Pair<String, String>?>(null) }
+    var composing by remember { mutableStateOf(false) }
     val mid = detailMid
     val user = userOpen
 
@@ -78,7 +80,17 @@ private fun AppRoot(
             onExit = onExit,
             onOpenDetail = { detailMid = it },
             onOpenUser = { uid, name -> userOpen = uid to name },
+            onCompose = { composing = true },
         )
+
+        if (composing) {
+            Surface(Modifier.fillMaxSize()) {
+                ComposeScreen(
+                    onBack = { composing = false },
+                    onPosted = { composing = false },
+                )
+            }
+        }
 
         if (user != null) {
             Surface(Modifier.fillMaxSize()) {
@@ -103,7 +115,8 @@ private fun AppRoot(
         }
     }
 
-    // 注册顺序决定优先级：详情 > 用户页 > 底部导航
-    BackHandler(enabled = mid != null) { detailMid = null }
-    BackHandler(enabled = mid == null && user != null) { userOpen = null }
+    // 注册顺序决定优先级：发微博 > 详情 > 用户页 > 底部导航
+    BackHandler(enabled = composing) { composing = false }
+    BackHandler(enabled = !composing && mid != null) { detailMid = null }
+    BackHandler(enabled = !composing && mid == null && user != null) { userOpen = null }
 }

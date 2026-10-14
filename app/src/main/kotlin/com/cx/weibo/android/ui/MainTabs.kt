@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Person
@@ -15,6 +16,7 @@ import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
@@ -58,6 +60,7 @@ fun MainTabs(
     onExit: () -> Unit,
     onOpenDetail: (String) -> Unit,
     onOpenUser: (String, String) -> Unit,
+    onCompose: () -> Unit,
 ) {
     var tab by rememberSaveable { mutableIntStateOf(0) }
     var seed by remember { mutableStateOf("") }
@@ -112,6 +115,14 @@ fun MainTabs(
                     )
                 },
             )
+        },
+        floatingActionButton = {
+            // 只在信息流 tab 显示「发微博」
+            if (tab == 0 || tab == 1) {
+                FloatingActionButton(onClick = onCompose) {
+                    Icon(Icons.Filled.Edit, contentDescription = "发微博")
+                }
+            }
         },
         bottomBar = {
             NavigationBar {
