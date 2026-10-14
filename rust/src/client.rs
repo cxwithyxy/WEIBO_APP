@@ -100,6 +100,15 @@ impl WeiboClient {
         since_id: String,
         count: u32,
     ) -> Result<TimelineRaw, WeiboError> {
+        // 服务端要求 `since_id` 必须是 long；传**空串**会直接报
+        //   parameter (since_id)'s value invalid, expect (long[...]), but get ()
+        // 注意：不能省略这个参数（省了会被当成缺参），第一页要显式给 0。
+        // 真机验证时踩到过。
+        let since_id = if since_id.trim().is_empty() {
+            "0".to_string()
+        } else {
+            since_id
+        };
         let raw = self.get_json(format!(
             "/ajax/feed/unreadfriendstimeline?since_id={since_id}&refresh=1&count={count}"
         ))?;
