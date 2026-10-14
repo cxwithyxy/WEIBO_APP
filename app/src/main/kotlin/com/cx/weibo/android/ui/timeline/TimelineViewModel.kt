@@ -4,9 +4,11 @@ import android.app.Application
 import android.content.Context
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
-import com.cx.weibo.Status
-import com.cx.weibo.TimelineRaw
-import com.cx.weibo.WeiboTime
+import uniffi.weibo_core.Status
+import uniffi.weibo_core.TimelineRaw
+import uniffi.weibo_core.weiboStatusImageUrls
+import uniffi.weibo_core.weiboStatusIsAd
+import uniffi.weibo_core.weiboTimeEpoch
 import com.cx.weibo.android.data.FeedCache
 import com.cx.weibo.android.data.FeedSnapshot
 import com.cx.weibo.android.data.Prefs
@@ -224,17 +226,17 @@ class TimelineViewModel(app: Application) : AndroidViewModel(app) {
     private fun fetchPage(cursor: String?): TimelineRaw =
         when (_ui.value.kind) {
             // 关注流：游标是「下一页页码」（它的 since_id 翻页实测无效）
-            FeedKind.FOLLOWING -> client.followingTimelinePageRaw(page = cursor?.toIntOrNull() ?: 1)
+            FeedKind.FOLLOWING -> client.followingTimelinePageRaw(page = (cursor?.toIntOrNull() ?: 1).toUInt(), count = 25u)
             // 推荐流：游标是 since_id（实测零重叠）
-            else -> client.homeTimelinePageRaw(sinceId = cursor ?: "0", count = 20)
+            else -> client.homeTimelinePageRaw(sinceId = cursor ?: "0", count = 20u)
         }
 
     /** 过滤 + 一律按时间倒序（最新在最上面） */
     private fun applyFilter(raw: List<Status>, f: FilterState): List<Status> =
         raw.asSequence()
             .filter { !(f.hideReposts && it.retweetedStatus != null) }
-            .filter { !(f.onlyWithImages && it.imageUrls.isEmpty()) }
-            .filter { !(f.hideAds && it.isAdFlag) }
-            .sortedByDescending { WeiboTime.epoch(it.createdAt) }
+            .filter { !(f.onlyWithImages && weiboStatusImageUrls(it).isEmpty()) }
+            .filter { !(f.hideAds && weiboStatusIsAd(it)) }
+            .sortedByDescending { weiboTimeEpoch(it.createdAt ?: "") }
             .toList()
 }

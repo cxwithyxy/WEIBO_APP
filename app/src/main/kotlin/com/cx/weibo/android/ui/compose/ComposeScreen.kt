@@ -76,7 +76,7 @@ fun ComposeScreen(
                             busy = true
                             scope.launch {
                                 val r = withContext(Dispatchers.IO) {
-                                    runCatching { client.postStatus(text, visible) }
+                                    runCatching { client.postStatus(text, visible.toUInt()) }
                                 }
                                 busy = false
                                 r.onSuccess {

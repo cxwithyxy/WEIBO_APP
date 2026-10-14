@@ -17,3 +17,13 @@ cookies.txt
 *.iml
 .vscode/
 .DS_Store
+
+# ---------------------------------------------------------------------------
+# Rust 核心（rust/）
+# ---------------------------------------------------------------------------
+rust/target/
+# 自动生成的 Kotlin 绑定（由 Gradle 任务 genUniffiBindings 产出）
+rust/build/
+
+# cargo-ndk 交叉编译产物（由 Gradle 任务 buildRustAndroid 产出）
+app/src/main/jniLibs/

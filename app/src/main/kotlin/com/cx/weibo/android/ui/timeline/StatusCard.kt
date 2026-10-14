@@ -29,7 +29,10 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
-import com.cx.weibo.Status
+import uniffi.weibo_core.Status
+import uniffi.weibo_core.weiboStatusDisplayTime
+import uniffi.weibo_core.weiboStatusImageUrls
+import uniffi.weibo_core.weiboStatusPlainText
 import com.cx.weibo.android.ui.common.ImageViewerDialog
 
 
@@ -54,13 +57,13 @@ fun StatusCard(
 
         Spacer(Modifier.height(8.dp))
         Text(
-            text = status.plainText,
+            text = weiboStatusPlainText(status),
             style = MaterialTheme.typography.bodyMedium,
             maxLines = 8,
             overflow = TextOverflow.Ellipsis,
         )
 
-        val images = status.imageUrls
+        val images = weiboStatusImageUrls(status)
         var viewerAt by remember { mutableStateOf<Int?>(null) }
         if (images.isNotEmpty()) {
             Spacer(Modifier.height(8.dp))
@@ -104,7 +107,7 @@ fun StatusCard(
                 )
                 Spacer(Modifier.height(2.dp))
                 Text(
-                    text = rt.plainText,
+                    text = weiboStatusPlainText(rt),
                     style = MaterialTheme.typography.bodySmall,
                     maxLines = 4,
                     overflow = TextOverflow.Ellipsis,
@@ -154,7 +157,7 @@ private fun Header(status: Status, onOpenUser: ((String, String) -> Unit)?) {
                 fontWeight = FontWeight.SemiBold,
             )
             Text(
-                text = status.displayTime,
+                text = weiboStatusDisplayTime(status),
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )

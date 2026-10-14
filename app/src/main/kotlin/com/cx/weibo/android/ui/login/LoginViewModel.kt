@@ -3,8 +3,9 @@ package com.cx.weibo.android.ui.login
 import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
-import com.cx.weibo.QrSession
-import com.cx.weibo.QrStatus
+import uniffi.weibo_core.QrSession
+import uniffi.weibo_core.QrStatus
+import uniffi.weibo_core.QrState
 import com.cx.weibo.android.data.SessionStore
 import com.cx.weibo.android.data.WeiboService
 import kotlinx.coroutines.Dispatchers
@@ -56,8 +57,8 @@ class LoginViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch {
             val qr = withContext(Dispatchers.IO) {
                 runCatching {
-                    client.auth.prepare()
-                    client.auth.createQr()
+                    client.auth().prepare()
+                    client.auth().createQr(300u)
                 }
             }
             qr.onSuccess {
@@ -72,17 +73,17 @@ class LoginViewModel(app: Application) : AndroidViewModel(app) {
     private suspend fun pollLoop(qrid: String) {
         while (true) {
             val st = withContext(Dispatchers.IO) {
-                runCatching { client.auth.poll(qrid) }.getOrNull()
+                runCatching { client.auth().poll(qrid) }.getOrNull()
             }
             if (st == null) {
                 _state.value = LoginUiState.Failed("轮询失败，请检查网络")
                 return
             }
             when (st.state) {
-                QrStatus.State.CONFIRMED -> {
+                QrState.CONFIRMED -> {
                     val ok = withContext(Dispatchers.IO) {
                         runCatching {
-                            st.url?.let { client.auth.complete(it) }
+                            st.url?.let { client.auth().complete(it) }
                             if (!client.isLoggedIn()) return@runCatching false
                             client.save(cookieFile)
                             client.restore(cookieFile)   // 回读校验落盘
@@ -93,19 +94,19 @@ class LoginViewModel(app: Application) : AndroidViewModel(app) {
                     return
                 }
 
-                QrStatus.State.EXPIRED, QrStatus.State.ERROR -> {
+                QrState.EXPIRED, QrState.ERROR -> {
                     _state.value = LoginUiState.Failed(st.message ?: "二维码已失效")
                     return
                 }
 
-                QrStatus.State.SCANNED -> {
+                QrState.SCANNED -> {
                     val cur = _state.value
                     if (cur is LoginUiState.ShowQr) {
                         _state.value = cur.copy(hint = "已扫描，请在手机上点「确认登录」")
                     }
                 }
 
-                QrStatus.State.WAITING -> Unit
+                QrState.WAITING -> Unit
             }
             delay(2000)
         }

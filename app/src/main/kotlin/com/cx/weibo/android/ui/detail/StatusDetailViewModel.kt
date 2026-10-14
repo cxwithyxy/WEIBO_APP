@@ -3,8 +3,8 @@ package com.cx.weibo.android.ui.detail
 import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
-import com.cx.weibo.Comment
-import com.cx.weibo.Status
+import uniffi.weibo_core.Comment
+import uniffi.weibo_core.Status
 import com.cx.weibo.android.data.WeiboService
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -42,7 +42,7 @@ class StatusDetailViewModel(app: Application) : AndroidViewModel(app) {
             val statusRes = withContext(Dispatchers.IO) { runCatching { client.statusDetail(mid) } }
             // flow=1（按时间）才能翻页；按热度翻不了
             val commentRes = withContext(Dispatchers.IO) {
-                runCatching { client.commentsPage(mid, maxId = 0, flow = 1) }
+                runCatching { client.commentsPage(mid, count = 20u, maxId = 0L, flow = 1u) }
             }
 
             val page = commentRes.getOrNull()
@@ -68,7 +68,7 @@ class StatusDetailViewModel(app: Application) : AndroidViewModel(app) {
         _ui.update { it.copy(loadingMore = true) }
         viewModelScope.launch {
             val res = withContext(Dispatchers.IO) {
-                runCatching { client.commentsPage(mid, maxId = cur.cursor, flow = 1) }
+                runCatching { client.commentsPage(mid, count = 20u, maxId = cur.cursor, flow = 1u) }
             }
             res.onSuccess { page ->
                 _ui.update {

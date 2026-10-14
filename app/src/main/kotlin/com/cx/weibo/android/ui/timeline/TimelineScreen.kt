@@ -43,7 +43,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import android.widget.Toast
-import com.cx.weibo.Status
+import uniffi.weibo_core.Status
 import com.cx.weibo.android.data.WeiboService
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
@@ -160,7 +160,7 @@ fun TimelineScreen(
                         dialogBusy = true
                         scope.launch {
                             val r = withContext(Dispatchers.IO) {
-                                runCatching { client.repost(id, dialogText) }
+                                runCatching { client.repost(id, dialogText, false, "") }
                             }
                             dialogBusy = false
                             r.onSuccess {
@@ -197,7 +197,7 @@ fun TimelineScreen(
                         dialogBusy = true
                         scope.launch {
                             val r = withContext(Dispatchers.IO) {
-                                runCatching { client.comment(id, dialogText) }
+                                runCatching { client.comment(id, dialogText, null, false, "") }
                             }
                             dialogBusy = false
                             r.onSuccess {

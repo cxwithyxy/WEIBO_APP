@@ -3,7 +3,7 @@ package com.cx.weibo.android.ui.search
 import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
-import com.cx.weibo.Status
+import uniffi.weibo_core.Status
 import com.cx.weibo.android.data.WeiboService
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -40,7 +40,7 @@ class SearchViewModel(app: Application) : AndroidViewModel(app) {
         _ui.update { it.copy(query = q, loading = true, searched = true, error = null, page = 1, endReached = false) }
 
         viewModelScope.launch {
-            val res = withContext(Dispatchers.IO) { runCatching { client.search(q, page = 1) } }
+            val res = withContext(Dispatchers.IO) { runCatching { client.search(q, count = 20u, page = 1u) } }
             res.onSuccess { list ->
                 _ui.update { it.copy(items = list, loading = false, endReached = list.isEmpty()) }
             }.onFailure { e ->
@@ -56,7 +56,7 @@ class SearchViewModel(app: Application) : AndroidViewModel(app) {
         _ui.update { it.copy(loadingMore = true) }
         viewModelScope.launch {
             val nextPage = cur.page + 1
-            val res = withContext(Dispatchers.IO) { runCatching { client.search(cur.query, page = nextPage) } }
+            val res = withContext(Dispatchers.IO) { runCatching { client.search(cur.query, count = 20u, page = nextPage.toUInt()) } }
             res.onSuccess { list ->
                 val seen = cur.items.mapNotNull { it.idstr }.toHashSet()
                 val fresh = list.filter { it.idstr != null && it.idstr !in seen }

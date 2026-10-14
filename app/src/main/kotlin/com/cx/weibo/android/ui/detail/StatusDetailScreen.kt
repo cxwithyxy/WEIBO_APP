@@ -48,8 +48,12 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import coil3.compose.AsyncImage
-import com.cx.weibo.Comment
-import com.cx.weibo.Status
+import uniffi.weibo_core.Comment
+import uniffi.weibo_core.weiboCommentPlainText
+import uniffi.weibo_core.weiboStatusDisplayTime
+import uniffi.weibo_core.weiboStatusImageUrls
+import uniffi.weibo_core.weiboStatusPlainText
+import uniffi.weibo_core.Status
 import com.cx.weibo.android.data.WeiboService
 import com.cx.weibo.android.ui.common.ImageViewerDialog
 import kotlinx.coroutines.Dispatchers
@@ -199,7 +203,7 @@ private fun StatusBody(status: Status, onOpenDetail: (String) -> Unit) {
                     fontWeight = FontWeight.SemiBold,
                 )
                 Text(
-                    status.source ?: status.displayTime,
+                    status.source ?: weiboStatusDisplayTime(status),
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -218,9 +222,9 @@ private fun StatusBody(status: Status, onOpenDetail: (String) -> Unit) {
                 }
             }
         }
-        Text(fullText ?: status.plainText, style = MaterialTheme.typography.bodyLarge)
+        Text(fullText ?: weiboStatusPlainText(status), style = MaterialTheme.typography.bodyLarge)
 
-        val images = status.imageUrls
+        val images = weiboStatusImageUrls(status)
         var viewerAt by remember { mutableStateOf<Int?>(null) }
         if (images.isNotEmpty()) {
             Spacer(Modifier.height(12.dp))
@@ -268,13 +272,13 @@ private fun StatusBody(status: Status, onOpenDetail: (String) -> Unit) {
                     color = MaterialTheme.colorScheme.primary,
                 )
                 Spacer(Modifier.height(2.dp))
-                Text(rt.plainText, style = MaterialTheme.typography.bodySmall)
+                Text(weiboStatusPlainText(rt), style = MaterialTheme.typography.bodySmall)
             }
         }
 
         Spacer(Modifier.height(14.dp))
         Text(
-            status.displayTime,
+            weiboStatusDisplayTime(status),
             style = MaterialTheme.typography.labelSmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
@@ -322,7 +326,7 @@ private fun CommentRow(c: Comment) {
             )
         }
         Spacer(Modifier.height(4.dp))
-        Text(c.plainText, style = MaterialTheme.typography.bodyMedium)
+        Text(weiboCommentPlainText(c), style = MaterialTheme.typography.bodyMedium)
         Spacer(Modifier.height(8.dp))
         HorizontalDivider()
     }

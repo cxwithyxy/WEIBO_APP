@@ -34,7 +34,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import coil3.compose.AsyncImage
-import com.cx.weibo.WeiboImages
+import uniffi.weibo_core.weiboImageLarge
 
 /**
  * 全屏图片浏览器：多图可左右翻页，双指缩放 / 拖动，点空白关闭。
@@ -61,7 +61,7 @@ fun ImageViewerDialog(
                 .background(Color.Black),
         ) {
             HorizontalPager(state = pagerState, modifier = Modifier.fillMaxSize()) { page ->
-                ZoomableImage(WeiboImages.large(urls[page]))
+                ZoomableImage(weiboImageLarge(urls[page]))
             }
 
             // 页码

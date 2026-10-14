@@ -32,7 +32,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import coil3.compose.AsyncImage
-import com.cx.weibo.User
+import uniffi.weibo_core.User
 import com.cx.weibo.android.ui.timeline.StatusCard
 
 @Composable

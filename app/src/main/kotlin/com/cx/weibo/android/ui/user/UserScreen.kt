@@ -43,8 +43,8 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
-import com.cx.weibo.Status
-import com.cx.weibo.User
+import uniffi.weibo_core.Status
+import uniffi.weibo_core.User
 import com.cx.weibo.android.data.WeiboService
 import com.cx.weibo.android.ui.timeline.StatusCard
 import kotlinx.coroutines.Dispatchers
@@ -82,7 +82,7 @@ fun UserScreen(
         val r = withContext(Dispatchers.IO) {
             runCatching {
                 val info = runCatching { client.userInfo(uid) }.getOrNull()
-                info to client.userTimelinePageRaw(uid, 1).statuses
+                info to client.userTimelinePageRaw(uid, 1u).statuses
             }
         }
         r.onSuccess { (info, list) ->
@@ -107,7 +107,7 @@ fun UserScreen(
             if (last >= 0 && total > 0 && last >= total - 3 && !loading && !loadingMore && !end) {
                 loadingMore = true
                 val r = withContext(Dispatchers.IO) {
-                    runCatching { client.userTimelinePageRaw(uid, page).statuses }
+                    runCatching { client.userTimelinePageRaw(uid, page.toUInt()).statuses }
                 }
                 r.onSuccess { list ->
                     val seen = items.mapNotNull { it.idstr }.toHashSet()

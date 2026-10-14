@@ -3,7 +3,7 @@ package com.cx.weibo.android.ui.hot
 import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
-import com.cx.weibo.HotBandItem
+import uniffi.weibo_core.HotBandItem
 import com.cx.weibo.android.data.WeiboService
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -33,7 +33,7 @@ class HotViewModel(app: Application) : AndroidViewModel(app) {
         _ui.update { it.copy(loading = true, error = null) }
         viewModelScope.launch {
             val res = withContext(Dispatchers.IO) {
-                runCatching { client.hotBand(count = 50) }
+                runCatching { client.hotBand(bandId = 1u, count = 50u) }
             }
             res.onSuccess { list ->
                 _ui.update { it.copy(items = list, loading = false) }

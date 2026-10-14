@@ -33,7 +33,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.cx.weibo.android.data.WeiboService
-import com.cx.weibo.http.RawRequest
+import uniffi.weibo_core.RawRequest
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
@@ -137,7 +137,7 @@ private fun QrImage(url: String, size: androidx.compose.ui.unit.Dp) {
         bitmap = withContext(Dispatchers.IO) {
             runCatching {
                 val resp = WeiboService.engine.execute(
-                    RawRequest(url, "GET", mapOf("User-Agent" to "Mozilla/5.0"))
+                    RawRequest(url, "GET", mapOf("User-Agent" to "Mozilla/5.0"), null)
                 )
                 BitmapFactory.decodeByteArray(resp.body, 0, resp.body.size)?.asImageBitmap()
             }.getOrNull()

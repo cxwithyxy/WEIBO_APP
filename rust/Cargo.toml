@@ -1,0 +1,23 @@
+[package]
+name = "weibo-core"
+version = "0.1.0"
+edition = "2024"
+
+[lib]
+name = "weibo_core"
+crate-type = ["cdylib", "lib"]
+
+# 供生成 Kotlin/Swift 绑定用
+[[bin]]
+name = "uniffi-bindgen"
+path = "src/bin/uniffi-bindgen.rs"
+
+[dependencies]
+chrono = "0.4.45"
+regex = "1.13.1"
+reqwest = { version = "0.13.5", default-features = false, features = ["blocking", "cookies", "json", "rustls", "gzip", "charset"] }
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.154"
+thiserror = "2.0.21"
+uniffi = { version = "0.32.2", features = ["cli"] }
+url = "2.5.8"
