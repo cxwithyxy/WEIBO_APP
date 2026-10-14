@@ -2,6 +2,10 @@ package com.cx.weibo.android.ui.common
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.calculatePan
+import androidx.compose.foundation.gestures.calculateZoom
 import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
@@ -97,10 +101,22 @@ private fun ZoomableImage(url: String) {
         modifier = Modifier
             .fillMaxSize()
             .pointerInput(Unit) {
-                detectTransformGestures { _, pan, zoom, _ ->
-                    val ns = (scale * zoom).coerceIn(1f, 6f)
-                    scale = ns
-                    offset = if (ns > 1f) offset + pan else Offset.Zero
+                // 关键：只在自己真的处理了手势时才 consume。
+                // 未缩放状态下的单指拖动**不消费** → 留给外层 HorizontalPager 翻页。
+                awaitEachGesture {
+                    awaitFirstDown(requireUnconsumed = false)
+                    do {
+                        val event = awaitPointerEvent()
+                        val zoom = event.calculateZoom()
+                        val pan = event.calculatePan()
+                        val handled = zoom != 1f || (scale > 1f && pan != Offset.Zero)
+                        if (handled) {
+                            val ns = (scale * zoom).coerceIn(1f, 6f)
+                            scale = ns
+                            offset = if (ns > 1f) offset + pan else Offset.Zero
+                            event.changes.forEach { it.consume() }
+                        }
+                    } while (event.changes.any { it.pressed })
                 }
             },
         contentAlignment = Alignment.Center,
