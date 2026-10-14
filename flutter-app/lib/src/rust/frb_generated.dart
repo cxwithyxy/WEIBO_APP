@@ -71,7 +71,7 @@ class RustLib extends BaseEntrypoint<RustLibApi, RustLibApiImpl, RustLibWire> {
   String get codegenVersion => '2.13.0';
 
   @override
-  int get rustContentHash => -111491326;
+  int get rustContentHash => -1354619575;
 
   static const kDefaultExternalLibraryLoaderConfig =
       ExternalLibraryLoaderConfig(
@@ -91,12 +91,59 @@ abstract class RustLibApi extends BaseApi {
 
   Future<void> crateApiWeiboAuthPrepare();
 
+  Future<void> crateApiWeiboCancelLike({required String id});
+
+  Future<void> crateApiWeiboComment({
+    required String id,
+    required String text,
+    String? replyToCid,
+    required bool alsoRepost,
+    required String picId,
+  });
+
+  Future<CommentDto> crateApiDtoCommentDtoDefault();
+
+  Future<CommentPageDto> crateApiDtoCommentPageDtoDefault();
+
+  Future<CommentPageDto> crateApiWeiboCommentsPage({
+    required String mid,
+    required int count,
+    required PlatformInt64 maxId,
+    required int flow,
+  });
+
+  Future<void> crateApiWeiboDestroyStatus({required String id});
+
+  Future<void> crateApiWeiboFavorite({
+    required String id,
+    required bool enabled,
+  });
+
+  Future<List<UserDto>> crateApiWeiboFollowingList({String? uid});
+
   Future<List<StatusDto>> crateApiWeiboFollowingTimeline({required int count});
+
+  Future<TimelinePageDto> crateApiWeiboFollowingTimelinePage({
+    required int page,
+    required int count,
+  });
 
   Future<List<StatusDto>> crateApiWeiboHomeTimeline({
     required int count,
     required String sinceId,
   });
+
+  Future<TimelinePageDto> crateApiWeiboHomeTimelinePage({
+    required String sinceId,
+    required int count,
+  });
+
+  Future<List<HotBandItemDto>> crateApiWeiboHotBand({
+    required int bandId,
+    required int count,
+  });
+
+  Future<HotBandItemDto> crateApiDtoHotBandItemDtoDefault();
 
   Future<HotItemDto> crateApiDtoHotItemDtoDefault();
 
@@ -108,9 +155,32 @@ abstract class RustLibApi extends BaseApi {
 
   Future<bool> crateApiWeiboIsLoggedIn();
 
+  Future<String?> crateApiWeiboLongText({required String id});
+
+  Future<List<StatusDto>> crateApiWeiboMyBlog({String? uid, required int page});
+
+  Future<String> crateApiWeiboPostStatus({
+    required String content,
+    required int visible,
+  });
+
+  Future<UserDto?> crateApiWeiboProfile({String? uid});
+
   Future<QrSessionDto> crateApiDtoQrSessionDtoDefault();
 
   Future<QrStatusDto> crateApiDtoQrStatusDtoDefault();
+
+  Future<void> crateApiWeiboRepost({
+    required String id,
+    required String text,
+    required bool alsoComment,
+    required String picId,
+  });
+
+  Future<List<StatusDto>> crateApiWeiboReposts({
+    required String mid,
+    required int page,
+  });
 
   Future<bool> crateApiWeiboRestore({required String cookieFile});
 
@@ -122,17 +192,26 @@ abstract class RustLibApi extends BaseApi {
     required int page,
   });
 
+  Future<void> crateApiWeiboSetLike({required String id});
+
   Future<String> crateApiWeiboSigninUrl();
 
   Future<StatusDto> crateApiWeiboStatusDetail({required String mid});
 
   Future<StatusDto> crateApiDtoStatusDtoDefault();
 
+  Future<TimelinePageDto> crateApiDtoTimelinePageDtoDefault();
+
   Future<String?> crateApiWeiboUid();
 
   Future<UserDto> crateApiDtoUserDtoDefault();
 
   Future<UserDto?> crateApiWeiboUserInfo({required String uid});
+
+  Future<TimelinePageDto> crateApiWeiboUserTimelinePage({
+    required String uid,
+    required int page,
+  });
 }
 
 class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
@@ -255,6 +334,254 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       const TaskConstMeta(debugName: "auth_prepare", argNames: []);
 
   @override
+  Future<void> crateApiWeiboCancelLike({required String id}) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_String(id, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 5,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_unit,
+          decodeErrorData: sse_decode_weibo_failure,
+        ),
+        constMeta: kCrateApiWeiboCancelLikeConstMeta,
+        argValues: [id],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiWeiboCancelLikeConstMeta =>
+      const TaskConstMeta(debugName: "cancel_like", argNames: ["id"]);
+
+  @override
+  Future<void> crateApiWeiboComment({
+    required String id,
+    required String text,
+    String? replyToCid,
+    required bool alsoRepost,
+    required String picId,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_String(id, serializer);
+          sse_encode_String(text, serializer);
+          sse_encode_opt_String(replyToCid, serializer);
+          sse_encode_bool(alsoRepost, serializer);
+          sse_encode_String(picId, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 6,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_unit,
+          decodeErrorData: sse_decode_weibo_failure,
+        ),
+        constMeta: kCrateApiWeiboCommentConstMeta,
+        argValues: [id, text, replyToCid, alsoRepost, picId],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiWeiboCommentConstMeta => const TaskConstMeta(
+    debugName: "comment",
+    argNames: ["id", "text", "replyToCid", "alsoRepost", "picId"],
+  );
+
+  @override
+  Future<CommentDto> crateApiDtoCommentDtoDefault() {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 7,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_comment_dto,
+          decodeErrorData: null,
+        ),
+        constMeta: kCrateApiDtoCommentDtoDefaultConstMeta,
+        argValues: [],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiDtoCommentDtoDefaultConstMeta =>
+      const TaskConstMeta(debugName: "comment_dto_default", argNames: []);
+
+  @override
+  Future<CommentPageDto> crateApiDtoCommentPageDtoDefault() {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 8,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_comment_page_dto,
+          decodeErrorData: null,
+        ),
+        constMeta: kCrateApiDtoCommentPageDtoDefaultConstMeta,
+        argValues: [],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiDtoCommentPageDtoDefaultConstMeta =>
+      const TaskConstMeta(debugName: "comment_page_dto_default", argNames: []);
+
+  @override
+  Future<CommentPageDto> crateApiWeiboCommentsPage({
+    required String mid,
+    required int count,
+    required PlatformInt64 maxId,
+    required int flow,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_String(mid, serializer);
+          sse_encode_u_32(count, serializer);
+          sse_encode_i_64(maxId, serializer);
+          sse_encode_u_32(flow, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 9,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_comment_page_dto,
+          decodeErrorData: sse_decode_weibo_failure,
+        ),
+        constMeta: kCrateApiWeiboCommentsPageConstMeta,
+        argValues: [mid, count, maxId, flow],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiWeiboCommentsPageConstMeta => const TaskConstMeta(
+    debugName: "comments_page",
+    argNames: ["mid", "count", "maxId", "flow"],
+  );
+
+  @override
+  Future<void> crateApiWeiboDestroyStatus({required String id}) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_String(id, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 10,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_unit,
+          decodeErrorData: sse_decode_weibo_failure,
+        ),
+        constMeta: kCrateApiWeiboDestroyStatusConstMeta,
+        argValues: [id],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiWeiboDestroyStatusConstMeta =>
+      const TaskConstMeta(debugName: "destroy_status", argNames: ["id"]);
+
+  @override
+  Future<void> crateApiWeiboFavorite({
+    required String id,
+    required bool enabled,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_String(id, serializer);
+          sse_encode_bool(enabled, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 11,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_unit,
+          decodeErrorData: sse_decode_weibo_failure,
+        ),
+        constMeta: kCrateApiWeiboFavoriteConstMeta,
+        argValues: [id, enabled],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiWeiboFavoriteConstMeta =>
+      const TaskConstMeta(debugName: "favorite", argNames: ["id", "enabled"]);
+
+  @override
+  Future<List<UserDto>> crateApiWeiboFollowingList({String? uid}) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_opt_String(uid, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 12,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_list_user_dto,
+          decodeErrorData: sse_decode_weibo_failure,
+        ),
+        constMeta: kCrateApiWeiboFollowingListConstMeta,
+        argValues: [uid],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiWeiboFollowingListConstMeta =>
+      const TaskConstMeta(debugName: "following_list", argNames: ["uid"]);
+
+  @override
   Future<List<StatusDto>> crateApiWeiboFollowingTimeline({required int count}) {
     return handler.executeNormal(
       NormalTask(
@@ -264,7 +591,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 5,
+            funcId: 13,
             port: port_,
           );
         },
@@ -283,6 +610,41 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       const TaskConstMeta(debugName: "following_timeline", argNames: ["count"]);
 
   @override
+  Future<TimelinePageDto> crateApiWeiboFollowingTimelinePage({
+    required int page,
+    required int count,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_u_32(page, serializer);
+          sse_encode_u_32(count, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 14,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_timeline_page_dto,
+          decodeErrorData: sse_decode_weibo_failure,
+        ),
+        constMeta: kCrateApiWeiboFollowingTimelinePageConstMeta,
+        argValues: [page, count],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiWeiboFollowingTimelinePageConstMeta =>
+      const TaskConstMeta(
+        debugName: "following_timeline_page",
+        argNames: ["page", "count"],
+      );
+
+  @override
   Future<List<StatusDto>> crateApiWeiboHomeTimeline({
     required int count,
     required String sinceId,
@@ -296,7 +658,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 6,
+            funcId: 15,
             port: port_,
           );
         },
@@ -317,6 +679,100 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   );
 
   @override
+  Future<TimelinePageDto> crateApiWeiboHomeTimelinePage({
+    required String sinceId,
+    required int count,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_String(sinceId, serializer);
+          sse_encode_u_32(count, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 16,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_timeline_page_dto,
+          decodeErrorData: sse_decode_weibo_failure,
+        ),
+        constMeta: kCrateApiWeiboHomeTimelinePageConstMeta,
+        argValues: [sinceId, count],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiWeiboHomeTimelinePageConstMeta =>
+      const TaskConstMeta(
+        debugName: "home_timeline_page",
+        argNames: ["sinceId", "count"],
+      );
+
+  @override
+  Future<List<HotBandItemDto>> crateApiWeiboHotBand({
+    required int bandId,
+    required int count,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_u_32(bandId, serializer);
+          sse_encode_u_32(count, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 17,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_list_hot_band_item_dto,
+          decodeErrorData: sse_decode_weibo_failure,
+        ),
+        constMeta: kCrateApiWeiboHotBandConstMeta,
+        argValues: [bandId, count],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiWeiboHotBandConstMeta =>
+      const TaskConstMeta(debugName: "hot_band", argNames: ["bandId", "count"]);
+
+  @override
+  Future<HotBandItemDto> crateApiDtoHotBandItemDtoDefault() {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 18,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_hot_band_item_dto,
+          decodeErrorData: null,
+        ),
+        constMeta: kCrateApiDtoHotBandItemDtoDefaultConstMeta,
+        argValues: [],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiDtoHotBandItemDtoDefaultConstMeta =>
+      const TaskConstMeta(debugName: "hot_band_item_dto_default", argNames: []);
+
+  @override
   Future<HotItemDto> crateApiDtoHotItemDtoDefault() {
     return handler.executeNormal(
       NormalTask(
@@ -325,7 +781,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 7,
+            funcId: 19,
             port: port_,
           );
         },
@@ -352,7 +808,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 8,
+            funcId: 20,
             port: port_,
           );
         },
@@ -379,7 +835,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 9,
+            funcId: 21,
             port: port_,
           );
         },
@@ -406,7 +862,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 10,
+            funcId: 22,
             port: port_,
           );
         },
@@ -433,7 +889,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 11,
+            funcId: 23,
             port: port_,
           );
         },
@@ -452,6 +908,128 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       const TaskConstMeta(debugName: "is_logged_in", argNames: []);
 
   @override
+  Future<String?> crateApiWeiboLongText({required String id}) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_String(id, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 24,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_opt_String,
+          decodeErrorData: sse_decode_weibo_failure,
+        ),
+        constMeta: kCrateApiWeiboLongTextConstMeta,
+        argValues: [id],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiWeiboLongTextConstMeta =>
+      const TaskConstMeta(debugName: "long_text", argNames: ["id"]);
+
+  @override
+  Future<List<StatusDto>> crateApiWeiboMyBlog({
+    String? uid,
+    required int page,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_opt_String(uid, serializer);
+          sse_encode_u_32(page, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 25,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_list_status_dto,
+          decodeErrorData: sse_decode_weibo_failure,
+        ),
+        constMeta: kCrateApiWeiboMyBlogConstMeta,
+        argValues: [uid, page],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiWeiboMyBlogConstMeta =>
+      const TaskConstMeta(debugName: "my_blog", argNames: ["uid", "page"]);
+
+  @override
+  Future<String> crateApiWeiboPostStatus({
+    required String content,
+    required int visible,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_String(content, serializer);
+          sse_encode_u_32(visible, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 26,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_String,
+          decodeErrorData: sse_decode_weibo_failure,
+        ),
+        constMeta: kCrateApiWeiboPostStatusConstMeta,
+        argValues: [content, visible],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiWeiboPostStatusConstMeta => const TaskConstMeta(
+    debugName: "post_status",
+    argNames: ["content", "visible"],
+  );
+
+  @override
+  Future<UserDto?> crateApiWeiboProfile({String? uid}) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_opt_String(uid, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 27,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_opt_box_autoadd_user_dto,
+          decodeErrorData: sse_decode_weibo_failure,
+        ),
+        constMeta: kCrateApiWeiboProfileConstMeta,
+        argValues: [uid],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiWeiboProfileConstMeta =>
+      const TaskConstMeta(debugName: "profile", argNames: ["uid"]);
+
+  @override
   Future<QrSessionDto> crateApiDtoQrSessionDtoDefault() {
     return handler.executeNormal(
       NormalTask(
@@ -460,7 +1038,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 12,
+            funcId: 28,
             port: port_,
           );
         },
@@ -487,7 +1065,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 13,
+            funcId: 29,
             port: port_,
           );
         },
@@ -506,6 +1084,76 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       const TaskConstMeta(debugName: "qr_status_dto_default", argNames: []);
 
   @override
+  Future<void> crateApiWeiboRepost({
+    required String id,
+    required String text,
+    required bool alsoComment,
+    required String picId,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_String(id, serializer);
+          sse_encode_String(text, serializer);
+          sse_encode_bool(alsoComment, serializer);
+          sse_encode_String(picId, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 30,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_unit,
+          decodeErrorData: sse_decode_weibo_failure,
+        ),
+        constMeta: kCrateApiWeiboRepostConstMeta,
+        argValues: [id, text, alsoComment, picId],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiWeiboRepostConstMeta => const TaskConstMeta(
+    debugName: "repost",
+    argNames: ["id", "text", "alsoComment", "picId"],
+  );
+
+  @override
+  Future<List<StatusDto>> crateApiWeiboReposts({
+    required String mid,
+    required int page,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_String(mid, serializer);
+          sse_encode_u_32(page, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 31,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_list_status_dto,
+          decodeErrorData: sse_decode_weibo_failure,
+        ),
+        constMeta: kCrateApiWeiboRepostsConstMeta,
+        argValues: [mid, page],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiWeiboRepostsConstMeta =>
+      const TaskConstMeta(debugName: "reposts", argNames: ["mid", "page"]);
+
+  @override
   Future<bool> crateApiWeiboRestore({required String cookieFile}) {
     return handler.executeNormal(
       NormalTask(
@@ -515,7 +1163,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 14,
+            funcId: 32,
             port: port_,
           );
         },
@@ -543,7 +1191,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 15,
+            funcId: 33,
             port: port_,
           );
         },
@@ -577,7 +1225,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 16,
+            funcId: 34,
             port: port_,
           );
         },
@@ -598,6 +1246,34 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   );
 
   @override
+  Future<void> crateApiWeiboSetLike({required String id}) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_String(id, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 35,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_unit,
+          decodeErrorData: sse_decode_weibo_failure,
+        ),
+        constMeta: kCrateApiWeiboSetLikeConstMeta,
+        argValues: [id],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiWeiboSetLikeConstMeta =>
+      const TaskConstMeta(debugName: "set_like", argNames: ["id"]);
+
+  @override
   Future<String> crateApiWeiboSigninUrl() {
     return handler.executeNormal(
       NormalTask(
@@ -606,7 +1282,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 17,
+            funcId: 36,
             port: port_,
           );
         },
@@ -634,7 +1310,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 18,
+            funcId: 37,
             port: port_,
           );
         },
@@ -661,7 +1337,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 19,
+            funcId: 38,
             port: port_,
           );
         },
@@ -680,6 +1356,33 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       const TaskConstMeta(debugName: "status_dto_default", argNames: []);
 
   @override
+  Future<TimelinePageDto> crateApiDtoTimelinePageDtoDefault() {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 39,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_timeline_page_dto,
+          decodeErrorData: null,
+        ),
+        constMeta: kCrateApiDtoTimelinePageDtoDefaultConstMeta,
+        argValues: [],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiDtoTimelinePageDtoDefaultConstMeta =>
+      const TaskConstMeta(debugName: "timeline_page_dto_default", argNames: []);
+
+  @override
   Future<String?> crateApiWeiboUid() {
     return handler.executeNormal(
       NormalTask(
@@ -688,7 +1391,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 20,
+            funcId: 40,
             port: port_,
           );
         },
@@ -715,7 +1418,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 21,
+            funcId: 41,
             port: port_,
           );
         },
@@ -743,7 +1446,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 22,
+            funcId: 42,
             port: port_,
           );
         },
@@ -761,6 +1464,41 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   TaskConstMeta get kCrateApiWeiboUserInfoConstMeta =>
       const TaskConstMeta(debugName: "user_info", argNames: ["uid"]);
 
+  @override
+  Future<TimelinePageDto> crateApiWeiboUserTimelinePage({
+    required String uid,
+    required int page,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_String(uid, serializer);
+          sse_encode_u_32(page, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 43,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_timeline_page_dto,
+          decodeErrorData: sse_decode_weibo_failure,
+        ),
+        constMeta: kCrateApiWeiboUserTimelinePageConstMeta,
+        argValues: [uid, page],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiWeiboUserTimelinePageConstMeta =>
+      const TaskConstMeta(
+        debugName: "user_timeline_page",
+        argNames: ["uid", "page"],
+      );
+
   @protected
   String dco_decode_String(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
@@ -771,6 +1509,18 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   bool dco_decode_bool(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     return raw as bool;
+  }
+
+  @protected
+  int dco_decode_box_autoadd_i_32(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return raw as int;
+  }
+
+  @protected
+  PlatformInt64 dco_decode_box_autoadd_i_64(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return dco_decode_i_64(raw);
   }
 
   @protected
@@ -786,9 +1536,63 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  CommentDto dco_decode_box_comment_dto(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return dco_decode_comment_dto(raw);
+  }
+
+  @protected
   StatusDto dco_decode_box_status_dto(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     return dco_decode_status_dto(raw);
+  }
+
+  @protected
+  CommentDto dco_decode_comment_dto(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 8)
+      throw Exception('unexpected arr length: expect 8 but see ${arr.length}');
+    return CommentDto(
+      id: dco_decode_String(arr[0]),
+      time: dco_decode_String(arr[1]),
+      text: dco_decode_String(arr[2]),
+      likes: dco_decode_i_32(arr[3]),
+      floor: dco_decode_i_32(arr[4]),
+      isAuthor: dco_decode_bool(arr[5]),
+      user: dco_decode_opt_box_autoadd_user_dto(arr[6]),
+      replyTo: dco_decode_opt_box_comment_dto(arr[7]),
+    );
+  }
+
+  @protected
+  CommentPageDto dco_decode_comment_page_dto(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 3)
+      throw Exception('unexpected arr length: expect 3 but see ${arr.length}');
+    return CommentPageDto(
+      comments: dco_decode_list_comment_dto(arr[0]),
+      nextMaxId: dco_decode_opt_box_autoadd_i_64(arr[1]),
+      total: dco_decode_opt_box_autoadd_i_32(arr[2]),
+    );
+  }
+
+  @protected
+  HotBandItemDto dco_decode_hot_band_item_dto(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 7)
+      throw Exception('unexpected arr length: expect 7 but see ${arr.length}');
+    return HotBandItemDto(
+      word: dco_decode_String(arr[0]),
+      note: dco_decode_String(arr[1]),
+      heat: dco_decode_i_64(arr[2]),
+      rank: dco_decode_i_32(arr[3]),
+      realpos: dco_decode_i_32(arr[4]),
+      label: dco_decode_String(arr[5]),
+      iconDesc: dco_decode_String(arr[6]),
+    );
   }
 
   @protected
@@ -824,6 +1628,18 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  List<CommentDto> dco_decode_list_comment_dto(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return (raw as List<dynamic>).map(dco_decode_comment_dto).toList();
+  }
+
+  @protected
+  List<HotBandItemDto> dco_decode_list_hot_band_item_dto(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return (raw as List<dynamic>).map(dco_decode_hot_band_item_dto).toList();
+  }
+
+  @protected
   List<HotItemDto> dco_decode_list_hot_item_dto(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     return (raw as List<dynamic>).map(dco_decode_hot_item_dto).toList();
@@ -842,9 +1658,27 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  List<UserDto> dco_decode_list_user_dto(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return (raw as List<dynamic>).map(dco_decode_user_dto).toList();
+  }
+
+  @protected
   String? dco_decode_opt_String(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     return raw == null ? null : dco_decode_String(raw);
+  }
+
+  @protected
+  int? dco_decode_opt_box_autoadd_i_32(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return raw == null ? null : dco_decode_box_autoadd_i_32(raw);
+  }
+
+  @protected
+  PlatformInt64? dco_decode_opt_box_autoadd_i_64(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return raw == null ? null : dco_decode_box_autoadd_i_64(raw);
   }
 
   @protected
@@ -857,6 +1691,12 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   UserDto? dco_decode_opt_box_autoadd_user_dto(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     return raw == null ? null : dco_decode_box_autoadd_user_dto(raw);
+  }
+
+  @protected
+  CommentDto? dco_decode_opt_box_comment_dto(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return raw == null ? null : dco_decode_box_comment_dto(raw);
   }
 
   @protected
@@ -915,6 +1755,18 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       isLongText: dco_decode_bool(arr[9]),
       user: dco_decode_opt_box_autoadd_user_dto(arr[10]),
       retweeted: dco_decode_opt_box_status_dto(arr[11]),
+    );
+  }
+
+  @protected
+  TimelinePageDto dco_decode_timeline_page_dto(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 2)
+      throw Exception('unexpected arr length: expect 2 but see ${arr.length}');
+    return TimelinePageDto(
+      statuses: dco_decode_list_status_dto(arr[0]),
+      nextCursor: dco_decode_opt_String(arr[1]),
     );
   }
 
@@ -980,6 +1832,18 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  int sse_decode_box_autoadd_i_32(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    return (sse_decode_i_32(deserializer));
+  }
+
+  @protected
+  PlatformInt64 sse_decode_box_autoadd_i_64(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    return (sse_decode_i_64(deserializer));
+  }
+
+  @protected
   QrStateDto sse_decode_box_autoadd_qr_state_dto(SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     return (sse_decode_qr_state_dto(deserializer));
@@ -992,9 +1856,72 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  CommentDto sse_decode_box_comment_dto(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    return (sse_decode_comment_dto(deserializer));
+  }
+
+  @protected
   StatusDto sse_decode_box_status_dto(SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     return (sse_decode_status_dto(deserializer));
+  }
+
+  @protected
+  CommentDto sse_decode_comment_dto(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_id = sse_decode_String(deserializer);
+    var var_time = sse_decode_String(deserializer);
+    var var_text = sse_decode_String(deserializer);
+    var var_likes = sse_decode_i_32(deserializer);
+    var var_floor = sse_decode_i_32(deserializer);
+    var var_isAuthor = sse_decode_bool(deserializer);
+    var var_user = sse_decode_opt_box_autoadd_user_dto(deserializer);
+    var var_replyTo = sse_decode_opt_box_comment_dto(deserializer);
+    return CommentDto(
+      id: var_id,
+      time: var_time,
+      text: var_text,
+      likes: var_likes,
+      floor: var_floor,
+      isAuthor: var_isAuthor,
+      user: var_user,
+      replyTo: var_replyTo,
+    );
+  }
+
+  @protected
+  CommentPageDto sse_decode_comment_page_dto(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_comments = sse_decode_list_comment_dto(deserializer);
+    var var_nextMaxId = sse_decode_opt_box_autoadd_i_64(deserializer);
+    var var_total = sse_decode_opt_box_autoadd_i_32(deserializer);
+    return CommentPageDto(
+      comments: var_comments,
+      nextMaxId: var_nextMaxId,
+      total: var_total,
+    );
+  }
+
+  @protected
+  HotBandItemDto sse_decode_hot_band_item_dto(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_word = sse_decode_String(deserializer);
+    var var_note = sse_decode_String(deserializer);
+    var var_heat = sse_decode_i_64(deserializer);
+    var var_rank = sse_decode_i_32(deserializer);
+    var var_realpos = sse_decode_i_32(deserializer);
+    var var_label = sse_decode_String(deserializer);
+    var var_iconDesc = sse_decode_String(deserializer);
+    return HotBandItemDto(
+      word: var_word,
+      note: var_note,
+      heat: var_heat,
+      rank: var_rank,
+      realpos: var_realpos,
+      label: var_label,
+      iconDesc: var_iconDesc,
+    );
   }
 
   @protected
@@ -1037,6 +1964,32 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  List<CommentDto> sse_decode_list_comment_dto(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    var len_ = sse_decode_i_32(deserializer);
+    var ans_ = <CommentDto>[];
+    for (var idx_ = 0; idx_ < len_; ++idx_) {
+      ans_.add(sse_decode_comment_dto(deserializer));
+    }
+    return ans_;
+  }
+
+  @protected
+  List<HotBandItemDto> sse_decode_list_hot_band_item_dto(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    var len_ = sse_decode_i_32(deserializer);
+    var ans_ = <HotBandItemDto>[];
+    for (var idx_ = 0; idx_ < len_; ++idx_) {
+      ans_.add(sse_decode_hot_band_item_dto(deserializer));
+    }
+    return ans_;
+  }
+
+  @protected
   List<HotItemDto> sse_decode_list_hot_item_dto(SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
 
@@ -1068,11 +2021,45 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  List<UserDto> sse_decode_list_user_dto(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    var len_ = sse_decode_i_32(deserializer);
+    var ans_ = <UserDto>[];
+    for (var idx_ = 0; idx_ < len_; ++idx_) {
+      ans_.add(sse_decode_user_dto(deserializer));
+    }
+    return ans_;
+  }
+
+  @protected
   String? sse_decode_opt_String(SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
 
     if (sse_decode_bool(deserializer)) {
       return (sse_decode_String(deserializer));
+    } else {
+      return null;
+    }
+  }
+
+  @protected
+  int? sse_decode_opt_box_autoadd_i_32(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    if (sse_decode_bool(deserializer)) {
+      return (sse_decode_box_autoadd_i_32(deserializer));
+    } else {
+      return null;
+    }
+  }
+
+  @protected
+  PlatformInt64? sse_decode_opt_box_autoadd_i_64(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    if (sse_decode_bool(deserializer)) {
+      return (sse_decode_box_autoadd_i_64(deserializer));
     } else {
       return null;
     }
@@ -1097,6 +2084,17 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
 
     if (sse_decode_bool(deserializer)) {
       return (sse_decode_box_autoadd_user_dto(deserializer));
+    } else {
+      return null;
+    }
+  }
+
+  @protected
+  CommentDto? sse_decode_opt_box_comment_dto(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    if (sse_decode_bool(deserializer)) {
+      return (sse_decode_box_comment_dto(deserializer));
     } else {
       return null;
     }
@@ -1169,6 +2167,14 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  TimelinePageDto sse_decode_timeline_page_dto(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_statuses = sse_decode_list_status_dto(deserializer);
+    var var_nextCursor = sse_decode_opt_String(deserializer);
+    return TimelinePageDto(statuses: var_statuses, nextCursor: var_nextCursor);
+  }
+
+  @protected
   int sse_decode_u_32(SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     return deserializer.buffer.getUint32();
@@ -1229,6 +2235,21 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  void sse_encode_box_autoadd_i_32(int self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_i_32(self, serializer);
+  }
+
+  @protected
+  void sse_encode_box_autoadd_i_64(
+    PlatformInt64 self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_i_64(self, serializer);
+  }
+
+  @protected
   void sse_encode_box_autoadd_qr_state_dto(
     QrStateDto self,
     SseSerializer serializer,
@@ -1244,9 +2265,54 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  void sse_encode_box_comment_dto(CommentDto self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_comment_dto(self, serializer);
+  }
+
+  @protected
   void sse_encode_box_status_dto(StatusDto self, SseSerializer serializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     sse_encode_status_dto(self, serializer);
+  }
+
+  @protected
+  void sse_encode_comment_dto(CommentDto self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_String(self.id, serializer);
+    sse_encode_String(self.time, serializer);
+    sse_encode_String(self.text, serializer);
+    sse_encode_i_32(self.likes, serializer);
+    sse_encode_i_32(self.floor, serializer);
+    sse_encode_bool(self.isAuthor, serializer);
+    sse_encode_opt_box_autoadd_user_dto(self.user, serializer);
+    sse_encode_opt_box_comment_dto(self.replyTo, serializer);
+  }
+
+  @protected
+  void sse_encode_comment_page_dto(
+    CommentPageDto self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_list_comment_dto(self.comments, serializer);
+    sse_encode_opt_box_autoadd_i_64(self.nextMaxId, serializer);
+    sse_encode_opt_box_autoadd_i_32(self.total, serializer);
+  }
+
+  @protected
+  void sse_encode_hot_band_item_dto(
+    HotBandItemDto self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_String(self.word, serializer);
+    sse_encode_String(self.note, serializer);
+    sse_encode_i_64(self.heat, serializer);
+    sse_encode_i_32(self.rank, serializer);
+    sse_encode_i_32(self.realpos, serializer);
+    sse_encode_String(self.label, serializer);
+    sse_encode_String(self.iconDesc, serializer);
   }
 
   @protected
@@ -1276,6 +2342,30 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     sse_encode_i_32(self.length, serializer);
     for (final item in self) {
       sse_encode_String(item, serializer);
+    }
+  }
+
+  @protected
+  void sse_encode_list_comment_dto(
+    List<CommentDto> self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_i_32(self.length, serializer);
+    for (final item in self) {
+      sse_encode_comment_dto(item, serializer);
+    }
+  }
+
+  @protected
+  void sse_encode_list_hot_band_item_dto(
+    List<HotBandItemDto> self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_i_32(self.length, serializer);
+    for (final item in self) {
+      sse_encode_hot_band_item_dto(item, serializer);
     }
   }
 
@@ -1314,12 +2404,44 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  void sse_encode_list_user_dto(List<UserDto> self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_i_32(self.length, serializer);
+    for (final item in self) {
+      sse_encode_user_dto(item, serializer);
+    }
+  }
+
+  @protected
   void sse_encode_opt_String(String? self, SseSerializer serializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
 
     sse_encode_bool(self != null, serializer);
     if (self != null) {
       sse_encode_String(self, serializer);
+    }
+  }
+
+  @protected
+  void sse_encode_opt_box_autoadd_i_32(int? self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    sse_encode_bool(self != null, serializer);
+    if (self != null) {
+      sse_encode_box_autoadd_i_32(self, serializer);
+    }
+  }
+
+  @protected
+  void sse_encode_opt_box_autoadd_i_64(
+    PlatformInt64? self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    sse_encode_bool(self != null, serializer);
+    if (self != null) {
+      sse_encode_box_autoadd_i_64(self, serializer);
     }
   }
 
@@ -1346,6 +2468,19 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     sse_encode_bool(self != null, serializer);
     if (self != null) {
       sse_encode_box_autoadd_user_dto(self, serializer);
+    }
+  }
+
+  @protected
+  void sse_encode_opt_box_comment_dto(
+    CommentDto? self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    sse_encode_bool(self != null, serializer);
+    if (self != null) {
+      sse_encode_box_comment_dto(self, serializer);
     }
   }
 
@@ -1398,6 +2533,16 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     sse_encode_bool(self.isLongText, serializer);
     sse_encode_opt_box_autoadd_user_dto(self.user, serializer);
     sse_encode_opt_box_status_dto(self.retweeted, serializer);
+  }
+
+  @protected
+  void sse_encode_timeline_page_dto(
+    TimelinePageDto self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_list_status_dto(self.statuses, serializer);
+    sse_encode_opt_String(self.nextCursor, serializer);
   }
 
   @protected

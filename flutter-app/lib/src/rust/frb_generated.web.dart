@@ -32,13 +32,31 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   bool dco_decode_bool(dynamic raw);
 
   @protected
+  int dco_decode_box_autoadd_i_32(dynamic raw);
+
+  @protected
+  PlatformInt64 dco_decode_box_autoadd_i_64(dynamic raw);
+
+  @protected
   QrStateDto dco_decode_box_autoadd_qr_state_dto(dynamic raw);
 
   @protected
   UserDto dco_decode_box_autoadd_user_dto(dynamic raw);
 
   @protected
+  CommentDto dco_decode_box_comment_dto(dynamic raw);
+
+  @protected
   StatusDto dco_decode_box_status_dto(dynamic raw);
+
+  @protected
+  CommentDto dco_decode_comment_dto(dynamic raw);
+
+  @protected
+  CommentPageDto dco_decode_comment_page_dto(dynamic raw);
+
+  @protected
+  HotBandItemDto dco_decode_hot_band_item_dto(dynamic raw);
 
   @protected
   HotItemDto dco_decode_hot_item_dto(dynamic raw);
@@ -53,6 +71,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   List<String> dco_decode_list_String(dynamic raw);
 
   @protected
+  List<CommentDto> dco_decode_list_comment_dto(dynamic raw);
+
+  @protected
+  List<HotBandItemDto> dco_decode_list_hot_band_item_dto(dynamic raw);
+
+  @protected
   List<HotItemDto> dco_decode_list_hot_item_dto(dynamic raw);
 
   @protected
@@ -62,13 +86,25 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   List<StatusDto> dco_decode_list_status_dto(dynamic raw);
 
   @protected
+  List<UserDto> dco_decode_list_user_dto(dynamic raw);
+
+  @protected
   String? dco_decode_opt_String(dynamic raw);
+
+  @protected
+  int? dco_decode_opt_box_autoadd_i_32(dynamic raw);
+
+  @protected
+  PlatformInt64? dco_decode_opt_box_autoadd_i_64(dynamic raw);
 
   @protected
   QrStateDto? dco_decode_opt_box_autoadd_qr_state_dto(dynamic raw);
 
   @protected
   UserDto? dco_decode_opt_box_autoadd_user_dto(dynamic raw);
+
+  @protected
+  CommentDto? dco_decode_opt_box_comment_dto(dynamic raw);
 
   @protected
   StatusDto? dco_decode_opt_box_status_dto(dynamic raw);
@@ -84,6 +120,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   StatusDto dco_decode_status_dto(dynamic raw);
+
+  @protected
+  TimelinePageDto dco_decode_timeline_page_dto(dynamic raw);
 
   @protected
   int dco_decode_u_32(dynamic raw);
@@ -107,13 +146,31 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   bool sse_decode_bool(SseDeserializer deserializer);
 
   @protected
+  int sse_decode_box_autoadd_i_32(SseDeserializer deserializer);
+
+  @protected
+  PlatformInt64 sse_decode_box_autoadd_i_64(SseDeserializer deserializer);
+
+  @protected
   QrStateDto sse_decode_box_autoadd_qr_state_dto(SseDeserializer deserializer);
 
   @protected
   UserDto sse_decode_box_autoadd_user_dto(SseDeserializer deserializer);
 
   @protected
+  CommentDto sse_decode_box_comment_dto(SseDeserializer deserializer);
+
+  @protected
   StatusDto sse_decode_box_status_dto(SseDeserializer deserializer);
+
+  @protected
+  CommentDto sse_decode_comment_dto(SseDeserializer deserializer);
+
+  @protected
+  CommentPageDto sse_decode_comment_page_dto(SseDeserializer deserializer);
+
+  @protected
+  HotBandItemDto sse_decode_hot_band_item_dto(SseDeserializer deserializer);
 
   @protected
   HotItemDto sse_decode_hot_item_dto(SseDeserializer deserializer);
@@ -128,6 +185,14 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   List<String> sse_decode_list_String(SseDeserializer deserializer);
 
   @protected
+  List<CommentDto> sse_decode_list_comment_dto(SseDeserializer deserializer);
+
+  @protected
+  List<HotBandItemDto> sse_decode_list_hot_band_item_dto(
+    SseDeserializer deserializer,
+  );
+
+  @protected
   List<HotItemDto> sse_decode_list_hot_item_dto(SseDeserializer deserializer);
 
   @protected
@@ -137,7 +202,16 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   List<StatusDto> sse_decode_list_status_dto(SseDeserializer deserializer);
 
   @protected
+  List<UserDto> sse_decode_list_user_dto(SseDeserializer deserializer);
+
+  @protected
   String? sse_decode_opt_String(SseDeserializer deserializer);
+
+  @protected
+  int? sse_decode_opt_box_autoadd_i_32(SseDeserializer deserializer);
+
+  @protected
+  PlatformInt64? sse_decode_opt_box_autoadd_i_64(SseDeserializer deserializer);
 
   @protected
   QrStateDto? sse_decode_opt_box_autoadd_qr_state_dto(
@@ -146,6 +220,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   UserDto? sse_decode_opt_box_autoadd_user_dto(SseDeserializer deserializer);
+
+  @protected
+  CommentDto? sse_decode_opt_box_comment_dto(SseDeserializer deserializer);
 
   @protected
   StatusDto? sse_decode_opt_box_status_dto(SseDeserializer deserializer);
@@ -161,6 +238,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   StatusDto sse_decode_status_dto(SseDeserializer deserializer);
+
+  @protected
+  TimelinePageDto sse_decode_timeline_page_dto(SseDeserializer deserializer);
 
   @protected
   int sse_decode_u_32(SseDeserializer deserializer);
@@ -184,6 +264,15 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   void sse_encode_bool(bool self, SseSerializer serializer);
 
   @protected
+  void sse_encode_box_autoadd_i_32(int self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_box_autoadd_i_64(
+    PlatformInt64 self,
+    SseSerializer serializer,
+  );
+
+  @protected
   void sse_encode_box_autoadd_qr_state_dto(
     QrStateDto self,
     SseSerializer serializer,
@@ -193,7 +282,25 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   void sse_encode_box_autoadd_user_dto(UserDto self, SseSerializer serializer);
 
   @protected
+  void sse_encode_box_comment_dto(CommentDto self, SseSerializer serializer);
+
+  @protected
   void sse_encode_box_status_dto(StatusDto self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_comment_dto(CommentDto self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_comment_page_dto(
+    CommentPageDto self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_hot_band_item_dto(
+    HotBandItemDto self,
+    SseSerializer serializer,
+  );
 
   @protected
   void sse_encode_hot_item_dto(HotItemDto self, SseSerializer serializer);
@@ -206,6 +313,18 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   void sse_encode_list_String(List<String> self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_list_comment_dto(
+    List<CommentDto> self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_list_hot_band_item_dto(
+    List<HotBandItemDto> self,
+    SseSerializer serializer,
+  );
 
   @protected
   void sse_encode_list_hot_item_dto(
@@ -226,7 +345,19 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
+  void sse_encode_list_user_dto(List<UserDto> self, SseSerializer serializer);
+
+  @protected
   void sse_encode_opt_String(String? self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_opt_box_autoadd_i_32(int? self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_opt_box_autoadd_i_64(
+    PlatformInt64? self,
+    SseSerializer serializer,
+  );
 
   @protected
   void sse_encode_opt_box_autoadd_qr_state_dto(
@@ -237,6 +368,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   @protected
   void sse_encode_opt_box_autoadd_user_dto(
     UserDto? self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_opt_box_comment_dto(
+    CommentDto? self,
     SseSerializer serializer,
   );
 
@@ -254,6 +391,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   void sse_encode_status_dto(StatusDto self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_timeline_page_dto(
+    TimelinePageDto self,
+    SseSerializer serializer,
+  );
 
   @protected
   void sse_encode_u_32(int self, SseSerializer serializer);

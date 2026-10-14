@@ -20,7 +20,10 @@ use std::sync::{Arc, OnceLock};
 use weibo_core::client::WeiboClient;
 use weibo_core::reqwest_engine::ReqwestEngine;
 
-use crate::api::dto::{HotItemDto, QrSessionDto, QrStatusDto, StatusDto, UserDto};
+use crate::api::dto::{
+    CommentDto, CommentPageDto, HotBandItemDto, HotItemDto, QrSessionDto, QrStatusDto, StatusDto,
+    TimelinePageDto, UserDto,
+};
 use crate::api::error::WeiboFailure;
 
 static CLIENT: OnceLock<Arc<WeiboClient>> = OnceLock::new();
@@ -203,6 +206,205 @@ pub async fn auth_poll(qrid: String) -> Result<QrStatusDto, WeiboFailure> {
 pub async fn auth_complete(url: String) -> Result<(), WeiboFailure> {
     let c = client()?;
     on_blocking_pool(move || c.auth().complete(url).map_err(WeiboFailure::from)).await
+}
+
+// ------------------------------------------------------------------ 分页时间线
+
+/// 首页时间线（**游标**翻页）。
+///
+/// `since_id` 传空串拉最新；之后把上页返回的 `next_cursor` 原样回传即可续拉（零重叠）。
+pub async fn home_timeline_page(
+    since_id: String,
+    count: u32,
+) -> Result<TimelinePageDto, WeiboFailure> {
+    let c = client()?;
+    on_blocking_pool(move || {
+        let p = c
+            .home_timeline_page(since_id, count)
+            .map_err(WeiboFailure::from)?;
+        Ok(p.into())
+    })
+    .await
+}
+
+/// 关注时间线（**页码**翻页）。
+///
+/// ⚠️ 该端点的 `since_id` 实测无效（第二页与第一页 100% 重叠），必须用 `page`。
+pub async fn following_timeline_page(
+    page: u32,
+    count: u32,
+) -> Result<TimelinePageDto, WeiboFailure> {
+    let c = client()?;
+    on_blocking_pool(move || {
+        let p = c
+            .following_timeline_page_raw(page, count)
+            .map_err(WeiboFailure::from)?;
+        Ok(p.into())
+    })
+    .await
+}
+
+/// 某用户的微博列表（页码翻页，零重叠）
+pub async fn user_timeline_page(uid: String, page: u32) -> Result<TimelinePageDto, WeiboFailure> {
+    let c = client()?;
+    on_blocking_pool(move || {
+        let p = c
+            .user_timeline_page_raw(uid, page)
+            .map_err(WeiboFailure::from)?;
+        Ok(p.into())
+    })
+    .await
+}
+
+/// 微博列表（`uid` 传 null 表示自己）
+pub async fn my_blog(uid: Option<String>, page: u32) -> Result<Vec<StatusDto>, WeiboFailure> {
+    let c = client()?;
+    on_blocking_pool(move || {
+        let list = c.my_blog(uid, page).map_err(WeiboFailure::from)?;
+        Ok(list.iter().map(StatusDto::from).collect())
+    })
+    .await
+}
+
+// ------------------------------------------------------------------ 用户
+
+/// 用户资料（`uid` 传 null 表示自己）
+pub async fn profile(uid: Option<String>) -> Result<Option<UserDto>, WeiboFailure> {
+    let c = client()?;
+    on_blocking_pool(move || {
+        let u = c.profile(uid).map_err(WeiboFailure::from)?;
+        Ok(u.as_ref().map(UserDto::from))
+    })
+    .await
+}
+
+/// 关注列表（`uid` 传 null 表示自己）
+pub async fn following_list(uid: Option<String>) -> Result<Vec<UserDto>, WeiboFailure> {
+    let c = client()?;
+    on_blocking_pool(move || {
+        let list = c.following(uid).map_err(WeiboFailure::from)?;
+        Ok(list.iter().map(UserDto::from).collect())
+    })
+    .await
+}
+
+// ------------------------------------------------------------------ 热搜榜单
+
+/// 热搜榜单详情
+pub async fn hot_band(band_id: u32, count: u32) -> Result<Vec<HotBandItemDto>, WeiboFailure> {
+    let c = client()?;
+    on_blocking_pool(move || {
+        let list = c.hot_band(band_id, count).map_err(WeiboFailure::from)?;
+        Ok(list.iter().map(HotBandItemDto::from).collect())
+    })
+    .await
+}
+
+// ------------------------------------------------------------------ 评论 / 转发
+
+/// 评论一页。
+///
+/// ⚠️ 两点历史坑：`count` 被服务端忽略（固定 20）；`flow=0` 按热度**翻不了页**，
+/// 需要翻页请传 `flow = 1`（按时间）。`max_id` 传上页的 `next_max_id`，首页传 0。
+pub async fn comments_page(
+    mid: String,
+    count: u32,
+    max_id: i64,
+    flow: u32,
+) -> Result<CommentPageDto, WeiboFailure> {
+    let c = client()?;
+    on_blocking_pool(move || {
+        let p = c
+            .comments_page(mid, count, max_id, flow)
+            .map_err(WeiboFailure::from)?;
+        Ok(CommentPageDto {
+            comments: p.comments.iter().map(CommentDto::from).collect(),
+            next_max_id: p.next_max_id,
+            total: p.total_number,
+        })
+    })
+    .await
+}
+
+/// 转发列表
+pub async fn reposts(mid: String, page: u32) -> Result<Vec<StatusDto>, WeiboFailure> {
+    let c = client()?;
+    on_blocking_pool(move || {
+        let list = c.reposts(mid, page).map_err(WeiboFailure::from)?;
+        Ok(list.iter().map(StatusDto::from).collect())
+    })
+    .await
+}
+
+/// 取长文全文（服务端会把长文截断；`is_long_text` 为 true 时才需要调）
+pub async fn long_text(id: String) -> Result<Option<String>, WeiboFailure> {
+    let c = client()?;
+    on_blocking_pool(move || c.long_text(id).map_err(WeiboFailure::from)).await
+}
+
+// ------------------------------------------------------------------ 写操作
+
+/// 点赞
+pub async fn set_like(id: String) -> Result<(), WeiboFailure> {
+    let c = client()?;
+    on_blocking_pool(move || c.set_like(id).map_err(WeiboFailure::from)).await
+}
+
+/// 取消赞
+pub async fn cancel_like(id: String) -> Result<(), WeiboFailure> {
+    let c = client()?;
+    on_blocking_pool(move || c.cancel_like(id).map_err(WeiboFailure::from)).await
+}
+
+/// 转发；`also_comment` 为 true 时同时评论
+pub async fn repost(
+    id: String,
+    text: String,
+    also_comment: bool,
+    pic_id: String,
+) -> Result<(), WeiboFailure> {
+    let c = client()?;
+    on_blocking_pool(move || {
+        c.repost(id, text, also_comment, pic_id)
+            .map_err(WeiboFailure::from)
+    })
+    .await
+}
+
+/// 发评论；`reply_to_cid` 非空时为回复某条评论
+pub async fn comment(
+    id: String,
+    text: String,
+    reply_to_cid: Option<String>,
+    also_repost: bool,
+    pic_id: String,
+) -> Result<(), WeiboFailure> {
+    let c = client()?;
+    on_blocking_pool(move || {
+        c.comment(id, text, reply_to_cid, also_repost, pic_id)
+            .map_err(WeiboFailure::from)
+    })
+    .await
+}
+
+/// 收藏 / 取消收藏
+pub async fn favorite(id: String, enabled: bool) -> Result<(), WeiboFailure> {
+    let c = client()?;
+    on_blocking_pool(move || c.favorite(id, enabled).map_err(WeiboFailure::from)).await
+}
+
+/// 删除自己发的微博
+pub async fn destroy_status(id: String) -> Result<(), WeiboFailure> {
+    let c = client()?;
+    on_blocking_pool(move || c.destroy_status(id).map_err(WeiboFailure::from)).await
+}
+
+/// 发微博（纯文字）。返回新微博的 idstr。
+///
+/// `visible`: 0=公开 1=仅关注 6=仅自己
+pub async fn post_status(content: String, visible: u32) -> Result<String, WeiboFailure> {
+    let c = client()?;
+    on_blocking_pool(move || c.post_status(content, visible).map_err(WeiboFailure::from)).await
 }
 
 // ------------------------------------------------------------------ 回归测试

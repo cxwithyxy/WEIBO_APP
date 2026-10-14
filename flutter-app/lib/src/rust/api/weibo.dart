@@ -80,3 +80,126 @@ Future<QrStatusDto> authPoll({required String qrid}) =>
 /// 扫码确认后完成登录（吸收 cookie）
 Future<void> authComplete({required String url}) =>
     RustLib.instance.api.crateApiWeiboAuthComplete(url: url);
+
+/// 首页时间线（**游标**翻页）。
+///
+/// `since_id` 传空串拉最新；之后把上页返回的 `next_cursor` 原样回传即可续拉（零重叠）。
+Future<TimelinePageDto> homeTimelinePage({
+  required String sinceId,
+  required int count,
+}) => RustLib.instance.api.crateApiWeiboHomeTimelinePage(
+  sinceId: sinceId,
+  count: count,
+);
+
+/// 关注时间线（**页码**翻页）。
+///
+/// ⚠️ 该端点的 `since_id` 实测无效（第二页与第一页 100% 重叠），必须用 `page`。
+Future<TimelinePageDto> followingTimelinePage({
+  required int page,
+  required int count,
+}) => RustLib.instance.api.crateApiWeiboFollowingTimelinePage(
+  page: page,
+  count: count,
+);
+
+/// 某用户的微博列表（页码翻页，零重叠）
+Future<TimelinePageDto> userTimelinePage({
+  required String uid,
+  required int page,
+}) => RustLib.instance.api.crateApiWeiboUserTimelinePage(uid: uid, page: page);
+
+/// 微博列表（`uid` 传 null 表示自己）
+Future<List<StatusDto>> myBlog({String? uid, required int page}) =>
+    RustLib.instance.api.crateApiWeiboMyBlog(uid: uid, page: page);
+
+/// 用户资料（`uid` 传 null 表示自己）
+Future<UserDto?> profile({String? uid}) =>
+    RustLib.instance.api.crateApiWeiboProfile(uid: uid);
+
+/// 关注列表（`uid` 传 null 表示自己）
+Future<List<UserDto>> followingList({String? uid}) =>
+    RustLib.instance.api.crateApiWeiboFollowingList(uid: uid);
+
+/// 热搜榜单详情
+Future<List<HotBandItemDto>> hotBand({
+  required int bandId,
+  required int count,
+}) => RustLib.instance.api.crateApiWeiboHotBand(bandId: bandId, count: count);
+
+/// 评论一页。
+///
+/// ⚠️ 两点历史坑：`count` 被服务端忽略（固定 20）；`flow=0` 按热度**翻不了页**，
+/// 需要翻页请传 `flow = 1`（按时间）。`max_id` 传上页的 `next_max_id`，首页传 0。
+Future<CommentPageDto> commentsPage({
+  required String mid,
+  required int count,
+  required PlatformInt64 maxId,
+  required int flow,
+}) => RustLib.instance.api.crateApiWeiboCommentsPage(
+  mid: mid,
+  count: count,
+  maxId: maxId,
+  flow: flow,
+);
+
+/// 转发列表
+Future<List<StatusDto>> reposts({required String mid, required int page}) =>
+    RustLib.instance.api.crateApiWeiboReposts(mid: mid, page: page);
+
+/// 取长文全文（服务端会把长文截断；`is_long_text` 为 true 时才需要调）
+Future<String?> longText({required String id}) =>
+    RustLib.instance.api.crateApiWeiboLongText(id: id);
+
+/// 点赞
+Future<void> setLike({required String id}) =>
+    RustLib.instance.api.crateApiWeiboSetLike(id: id);
+
+/// 取消赞
+Future<void> cancelLike({required String id}) =>
+    RustLib.instance.api.crateApiWeiboCancelLike(id: id);
+
+/// 转发；`also_comment` 为 true 时同时评论
+Future<void> repost({
+  required String id,
+  required String text,
+  required bool alsoComment,
+  required String picId,
+}) => RustLib.instance.api.crateApiWeiboRepost(
+  id: id,
+  text: text,
+  alsoComment: alsoComment,
+  picId: picId,
+);
+
+/// 发评论；`reply_to_cid` 非空时为回复某条评论
+Future<void> comment({
+  required String id,
+  required String text,
+  String? replyToCid,
+  required bool alsoRepost,
+  required String picId,
+}) => RustLib.instance.api.crateApiWeiboComment(
+  id: id,
+  text: text,
+  replyToCid: replyToCid,
+  alsoRepost: alsoRepost,
+  picId: picId,
+);
+
+/// 收藏 / 取消收藏
+Future<void> favorite({required String id, required bool enabled}) =>
+    RustLib.instance.api.crateApiWeiboFavorite(id: id, enabled: enabled);
+
+/// 删除自己发的微博
+Future<void> destroyStatus({required String id}) =>
+    RustLib.instance.api.crateApiWeiboDestroyStatus(id: id);
+
+/// 发微博（纯文字）。返回新微博的 idstr。
+///
+/// `visible`: 0=公开 1=仅关注 6=仅自己
+Future<String> postStatus({required String content, required int visible}) =>
+    RustLib.instance.api.crateApiWeiboPostStatus(
+      content: content,
+      visible: visible,
+    );

@@ -37,6 +37,9 @@ dependencies:
   flutter_rust_bridge: 2.13.0
   weibo_flutter_bridge:
     path: rust_builder
+  path_provider: ^2.1.6
+  cached_network_image: ^4.0.4
+  shared_preferences: ^2.5.6
 
 dev_dependencies:
   flutter_test:

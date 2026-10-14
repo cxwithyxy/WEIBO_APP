@@ -18,7 +18,9 @@
 //! - 不把 `HashMap<String, PicInfo>` 这种原始结构跨 FFI 来回搬。
 
 use weibo_core::auth::{QrSession, QrState, QrStatus};
-use weibo_core::models::{weibo_strip_tags, HotItem, Status, User};
+use weibo_core::models::{
+    weibo_strip_tags, Comment, HotBandItem, HotItem, Status, TimelinePage, TimelineRaw, User,
+};
 
 // ------------------------------------------------------------------ 用户
 
@@ -166,6 +168,109 @@ impl From<QrStatus> for QrStatusDto {
             state: Some(q.state.into()),
             url: q.url,
             message: q.message,
+        }
+    }
+}
+
+// ------------------------------------------------------------------ 分页时间线
+
+/// 一页时间线（带下一页游标）。
+///
+/// 游标语义按端点而异，别搞混：
+///  - 首页时间线（`unreadfriendstimeline`）：游标是 `since_id`，把 `next_cursor` 原样回传；
+///  - 关注时间线（`friendstimeline`）：`since_id` **实测无效**（第二页与第一页 100% 重叠），
+///    必须用 **页码**，所以 `next_cursor` 在这里存的是「下一页页码」。
+#[derive(Debug, Clone, Default)]
+pub struct TimelinePageDto {
+    pub statuses: Vec<StatusDto>,
+    pub next_cursor: Option<String>,
+}
+
+impl From<TimelinePage> for TimelinePageDto {
+    fn from(p: TimelinePage) -> Self {
+        Self {
+            statuses: p.statuses.iter().map(StatusDto::from).collect(),
+            next_cursor: p.next_cursor,
+        }
+    }
+}
+
+impl From<TimelineRaw> for TimelinePageDto {
+    fn from(p: TimelineRaw) -> Self {
+        Self {
+            statuses: p.statuses.iter().map(StatusDto::from).collect(),
+            next_cursor: p.next_cursor,
+        }
+    }
+}
+
+// ------------------------------------------------------------------ 评论
+
+#[derive(Debug, Clone, Default)]
+pub struct CommentDto {
+    pub id: String,
+    /// 已格式化
+    pub time: String,
+    /// 已剥 HTML
+    pub text: String,
+    pub likes: i32,
+    pub floor: i32,
+    /// 是否为微博作者本人的评论
+    pub is_author: bool,
+    pub user: Option<UserDto>,
+    /// 被回复的评论（递归）
+    pub reply_to: Option<Box<CommentDto>>,
+}
+
+impl From<&Comment> for CommentDto {
+    fn from(c: &Comment) -> Self {
+        Self {
+            id: c.idstr.clone().unwrap_or_default(),
+            time: weibo_core::weibo_time_format(c.created_at.clone().unwrap_or_default()),
+            text: c.plain_text(),
+            likes: c.like_counts.unwrap_or(0),
+            floor: c.floor_number.unwrap_or(0),
+            is_author: c.is_author.unwrap_or(false),
+            user: c.user.as_ref().map(UserDto::from),
+            reply_to: c
+                .reply_comment
+                .as_ref()
+                .map(|r| Box::new(CommentDto::from(r.as_ref()))),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct CommentPageDto {
+    pub comments: Vec<CommentDto>,
+    /// 下一页游标（原样回传）
+    pub next_max_id: Option<i64>,
+    pub total: Option<i32>,
+}
+
+// ------------------------------------------------------------------ 热搜榜单
+
+#[derive(Debug, Clone, Default)]
+pub struct HotBandItemDto {
+    pub word: String,
+    pub note: String,
+    pub heat: i64,
+    pub rank: i32,
+    pub realpos: i32,
+    pub label: String,
+    pub icon_desc: String,
+}
+
+impl From<&HotBandItem> for HotBandItemDto {
+    fn from(h: &HotBandItem) -> Self {
+        Self {
+            word: h.word.clone().unwrap_or_default(),
+            note: h.note.clone().unwrap_or_default(),
+            heat: h.num.unwrap_or(0),
+            rank: h.rank.unwrap_or(0),
+            realpos: h.realpos.unwrap_or(0),
+            label: h.label_name.clone().unwrap_or_default(),
+            icon_desc: h.icon_desc.clone().unwrap_or_default(),
         }
     }
 }

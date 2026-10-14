@@ -7,7 +7,136 @@ import '../frb_generated.dart';
 
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
-// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `from`, `from`, `from`, `from`, `from`, `from`
+// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`
+
+class CommentDto {
+  final String id;
+
+  /// 已格式化
+  final String time;
+
+  /// 已剥 HTML
+  final String text;
+  final int likes;
+  final int floor;
+
+  /// 是否为微博作者本人的评论
+  final bool isAuthor;
+  final UserDto? user;
+
+  /// 被回复的评论（递归）
+  final CommentDto? replyTo;
+
+  const CommentDto({
+    required this.id,
+    required this.time,
+    required this.text,
+    required this.likes,
+    required this.floor,
+    required this.isAuthor,
+    this.user,
+    this.replyTo,
+  });
+
+  static Future<CommentDto> default_() =>
+      RustLib.instance.api.crateApiDtoCommentDtoDefault();
+
+  @override
+  int get hashCode =>
+      id.hashCode ^
+      time.hashCode ^
+      text.hashCode ^
+      likes.hashCode ^
+      floor.hashCode ^
+      isAuthor.hashCode ^
+      user.hashCode ^
+      replyTo.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is CommentDto &&
+          runtimeType == other.runtimeType &&
+          id == other.id &&
+          time == other.time &&
+          text == other.text &&
+          likes == other.likes &&
+          floor == other.floor &&
+          isAuthor == other.isAuthor &&
+          user == other.user &&
+          replyTo == other.replyTo;
+}
+
+class CommentPageDto {
+  final List<CommentDto> comments;
+
+  /// 下一页游标（原样回传）
+  final PlatformInt64? nextMaxId;
+  final int? total;
+
+  const CommentPageDto({required this.comments, this.nextMaxId, this.total});
+
+  static Future<CommentPageDto> default_() =>
+      RustLib.instance.api.crateApiDtoCommentPageDtoDefault();
+
+  @override
+  int get hashCode => comments.hashCode ^ nextMaxId.hashCode ^ total.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is CommentPageDto &&
+          runtimeType == other.runtimeType &&
+          comments == other.comments &&
+          nextMaxId == other.nextMaxId &&
+          total == other.total;
+}
+
+class HotBandItemDto {
+  final String word;
+  final String note;
+  final PlatformInt64 heat;
+  final int rank;
+  final int realpos;
+  final String label;
+  final String iconDesc;
+
+  const HotBandItemDto({
+    required this.word,
+    required this.note,
+    required this.heat,
+    required this.rank,
+    required this.realpos,
+    required this.label,
+    required this.iconDesc,
+  });
+
+  static Future<HotBandItemDto> default_() =>
+      RustLib.instance.api.crateApiDtoHotBandItemDtoDefault();
+
+  @override
+  int get hashCode =>
+      word.hashCode ^
+      note.hashCode ^
+      heat.hashCode ^
+      rank.hashCode ^
+      realpos.hashCode ^
+      label.hashCode ^
+      iconDesc.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is HotBandItemDto &&
+          runtimeType == other.runtimeType &&
+          word == other.word &&
+          note == other.note &&
+          heat == other.heat &&
+          rank == other.rank &&
+          realpos == other.realpos &&
+          label == other.label &&
+          iconDesc == other.iconDesc;
+}
 
 class HotItemDto {
   final String word;
@@ -160,6 +289,33 @@ class StatusDto {
           isLongText == other.isLongText &&
           user == other.user &&
           retweeted == other.retweeted;
+}
+
+/// 一页时间线（带下一页游标）。
+///
+/// 游标语义按端点而异，别搞混：
+///  - 首页时间线（`unreadfriendstimeline`）：游标是 `since_id`，把 `next_cursor` 原样回传；
+///  - 关注时间线（`friendstimeline`）：`since_id` **实测无效**（第二页与第一页 100% 重叠），
+///    必须用 **页码**，所以 `next_cursor` 在这里存的是「下一页页码」。
+class TimelinePageDto {
+  final List<StatusDto> statuses;
+  final String? nextCursor;
+
+  const TimelinePageDto({required this.statuses, this.nextCursor});
+
+  static Future<TimelinePageDto> default_() =>
+      RustLib.instance.api.crateApiDtoTimelinePageDtoDefault();
+
+  @override
+  int get hashCode => statuses.hashCode ^ nextCursor.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is TimelinePageDto &&
+          runtimeType == other.runtimeType &&
+          statuses == other.statuses &&
+          nextCursor == other.nextCursor;
 }
 
 class UserDto {
