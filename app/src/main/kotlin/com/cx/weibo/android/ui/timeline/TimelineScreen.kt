@@ -118,6 +118,11 @@ fun TimelineScreen(
 
     fun toast(msg: String) = Toast.makeText(ctx, msg, Toast.LENGTH_SHORT).show()
 
+    // 刷新后服务端的计数已包含我的赞，清掉乐观标记，避免重复 +1
+    LaunchedEffect(ui.refreshing) {
+        if (!ui.refreshing) likedIds.clear()
+    }
+
     fun toggleLike(s: Status) {
         val id = s.idstr ?: return
         val wasLiked = likedIds[id] == true
@@ -249,6 +254,7 @@ fun TimelineScreen(
                             onRepost = { repostTarget = s; dialogText = "" },
                             onComment = { commentTarget = s; dialogText = "" },
                             liked = likedIds[s.idstr] == true,
+                            likeDelta = if (likedIds[s.idstr] == true) 1 else 0,
                         )
                     }
                     if (ui.loadingMore) {
