@@ -52,6 +52,8 @@ data class Status(
     @SerializedName("pic_num") val picNum: Int? = null,
     @SerializedName("retweeted_status") val retweetedStatus: Status? = null,
     @SerializedName("isAd") val isAd: JsonElement? = null,
+    /** 服务端会截断长文；为 true 时需调 /ajax/statuses/longtext 取全文 */
+    @SerializedName("isLongText") val isLongText: Boolean? = null,
 ) {
     /**
      * 是否广告。
@@ -164,6 +166,14 @@ data class HotBandItem(
 // ------------------------------------------------------------------
 
 internal data class Envelope(val ok: Int? = null, val message: String? = null)
+
+/** `/ajax/statuses/longtext` 的响应（长文全文） */
+internal data class LongTextResp(val ok: Int? = null, val data: LongTextData? = null)
+
+internal data class LongTextData(
+    @SerializedName("longTextContent") val longTextContent: String? = null,
+    @SerializedName("longTextContent_raw") val longTextContentRaw: String? = null,
+)
 
 internal data class TimelineResp(
     val ok: Int? = null,

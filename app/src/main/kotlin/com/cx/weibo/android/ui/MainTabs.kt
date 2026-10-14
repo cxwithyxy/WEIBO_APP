@@ -4,6 +4,7 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.Home
@@ -51,12 +52,15 @@ fun MainTabs(
     onThemeChange: (String) -> Unit,
     onExit: () -> Unit,
     onOpenDetail: (String) -> Unit,
+    onOpenUser: (String, String) -> Unit,
 ) {
     var tab by rememberSaveable { mutableIntStateOf(0) }
     var seed by remember { mutableStateOf("") }
     var showExit by remember { mutableStateOf(false) }
 
-    // 返回键：不在首页先回首页；已在首页则弹确认退出
+    // 滚动状态提到这里保活 —— 否则切 tab 会重建列表、位置丢失（踩过）
+    val feedStates = remember { mutableMapOf<FeedKind, LazyListState>() }
+
     BackHandler(enabled = true) {
         if (tab != 0) tab = 0 else showExit = true
     }
@@ -95,9 +99,19 @@ fun MainTabs(
     ) { padding ->
         Box(Modifier.fillMaxSize().padding(padding)) {
             when (tab) {
-                0 -> TimelineScreen(kind = FeedKind.RECOMMEND, onOpenDetail = onOpenDetail)
+                0 -> TimelineScreen(
+                    kind = FeedKind.RECOMMEND,
+                    listState = feedStates.getOrPut(FeedKind.RECOMMEND) { LazyListState() },
+                    onOpenDetail = onOpenDetail,
+                    onOpenUser = onOpenUser,
+                )
 
-                1 -> TimelineScreen(kind = FeedKind.FOLLOWING, onOpenDetail = onOpenDetail)
+                1 -> TimelineScreen(
+                    kind = FeedKind.FOLLOWING,
+                    listState = feedStates.getOrPut(FeedKind.FOLLOWING) { LazyListState() },
+                    onOpenDetail = onOpenDetail,
+                    onOpenUser = onOpenUser,
+                )
 
                 2 -> SearchScreen(
                     seed = seed,

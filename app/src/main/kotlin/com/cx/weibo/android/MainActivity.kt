@@ -24,6 +24,7 @@ import com.cx.weibo.android.ui.login.LoginUiState
 import com.cx.weibo.android.ui.login.LoginViewModel
 import com.cx.weibo.android.ui.theme.ThemeMode
 import com.cx.weibo.android.ui.theme.WeiboTheme
+import com.cx.weibo.android.ui.user.UserScreen
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -63,18 +64,33 @@ private fun AppRoot(
         return
     }
 
+    // 覆盖式导航（不销毁下层，保住滚动位置）：
+    //   MainTabs  →  用户微博页  →  微博详情
     var detailMid by remember { mutableStateOf<String?>(null) }
+    var userOpen by remember { mutableStateOf<Pair<String, String>?>(null) }
     val mid = detailMid
+    val user = userOpen
 
-    // 关键：详情页用**覆盖**而不是替换 —— 否则 MainTabs 会被销毁重建，
-    // LazyListState 丢失，返回列表就跳到顶部了。
     Box(Modifier.fillMaxSize()) {
         MainTabs(
             themeMode = themeMode,
             onThemeChange = onThemeChange,
             onExit = onExit,
             onOpenDetail = { detailMid = it },
+            onOpenUser = { uid, name -> userOpen = uid to name },
         )
+
+        if (user != null) {
+            Surface(Modifier.fillMaxSize()) {
+                UserScreen(
+                    uid = user.first,
+                    name = user.second,
+                    onBack = { userOpen = null },
+                    onOpenDetail = { detailMid = it },
+                    onOpenUser = { uid, name -> userOpen = uid to name },
+                )
+            }
+        }
 
         if (mid != null) {
             Surface(Modifier.fillMaxSize()) {
@@ -87,6 +103,7 @@ private fun AppRoot(
         }
     }
 
-    // 注册在 MainTabs 之后 → 优先生效，先关详情
+    // 注册顺序决定优先级：详情 > 用户页 > 底部导航
     BackHandler(enabled = mid != null) { detailMid = null }
+    BackHandler(enabled = mid == null && user != null) { userOpen = null }
 }

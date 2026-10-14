@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
@@ -41,13 +42,14 @@ import kotlinx.coroutines.flow.first
 @Composable
 fun TimelineScreen(
     kind: FeedKind,
+    listState: LazyListState,
     onOpenDetail: (String) -> Unit,
+    onOpenUser: (String, String) -> Unit,
 ) {
     val vm: TimelineViewModel = viewModel(key = "feed-${kind.name}")
     LaunchedEffect(kind) { vm.start(kind) }
 
     val ui by vm.ui.collectAsStateWithLifecycle()
-    val listState = rememberLazyListState()
 
     // 触底加载：改成**持续监听可见下标**，而不是「布尔值的边沿」——
     // 旧写法（LaunchedEffect(nearBottom)）到底后只触发一次，之后就再也不加载了（踩过）。
@@ -61,22 +63,24 @@ fun TimelineScreen(
         }
     }
 
-    // 重开后跳回上次阅读的位置（每条流各记一份）
-    // 关键：要等列表**真正布局出来**再滚 —— 否则同一帧里的 scrollToItem
-    // 会被 LazyColumn 的首次布局覆盖掉（踩过）。
-    var restored by remember(kind) { mutableStateOf(false) }
-    LaunchedEffect(ui.items, ui.loading) {
-        if (restored || ui.loading) return@LaunchedEffect
+    // 重开后跳回上次阅读的位置。
+    // 只在「这个 VM 还没恢复过」时做一次 —— restored 存在 VM 里，
+    // 所以切 tab 回来不会重新跳（否则就是用户反馈的「跳到一个奇怪位置」）。
+    LaunchedEffect(ui.items, ui.loading, ui.restored) {
+        if (ui.restored || ui.loading) return@LaunchedEffect
         val a = ui.anchorId
-            ?: return@LaunchedEffect
+        if (a == null) {
+            vm.markRestored()
+            return@LaunchedEffect
+        }
         val idx = ui.items.indexOfFirst { it.idstr == a }
         if (idx < 0) {
-            restored = true
+            vm.markRestored()
             return@LaunchedEffect
         }
         snapshotFlow { listState.layoutInfo.totalItemsCount }.first { it > idx }
         listState.scrollToItem(idx)
-        restored = true
+        vm.markRestored()
     }
 
     // 持续记录当前顶部那条
@@ -123,7 +127,11 @@ fun TimelineScreen(
 
                 else -> LazyColumn(state = listState, modifier = Modifier.fillMaxSize()) {
                     items(ui.items, key = { it.idstr ?: it.hashCode().toString() }) { s ->
-                        StatusCard(s, onClick = { s.idstr?.let(onOpenDetail) })
+                        StatusCard(
+                            s,
+                            onClick = { s.idstr?.let(onOpenDetail) },
+                            onOpenUser = onOpenUser,
+                        )
                     }
                     if (ui.loadingMore) {
                         item {

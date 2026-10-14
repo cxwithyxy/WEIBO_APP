@@ -1,6 +1,7 @@
 package com.cx.weibo.android.ui.common
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
@@ -53,8 +54,7 @@ fun ImageViewerDialog(
         Box(
             Modifier
                 .fillMaxSize()
-                .background(Color.Black)
-                .pointerInput(Unit) { detectTransformGestures { _, _, _, _ -> } },
+                .background(Color.Black),
         ) {
             HorizontalPager(state = pagerState, modifier = Modifier.fillMaxSize()) { page ->
                 ZoomableImage(WeiboImages.large(urls[page]))
@@ -73,7 +73,7 @@ fun ImageViewerDialog(
                 )
             }
 
-            // 关闭
+            // 关闭（可点）
             Text(
                 text = "✕",
                 color = Color.White,
@@ -82,7 +82,7 @@ fun ImageViewerDialog(
                     .align(Alignment.TopEnd)
                     .statusBarsPadding()
                     .padding(16.dp)
-                    .pointerInput(Unit) { detectTransformGestures { _, _, _, _ -> } },
+                    .clickable { onDismiss() },
             )
         }
     }

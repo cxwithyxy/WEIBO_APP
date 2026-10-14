@@ -34,14 +34,18 @@ import com.cx.weibo.android.ui.common.ImageViewerDialog
 
 
 @Composable
-fun StatusCard(status: Status, onClick: (() -> Unit)? = null) {
+fun StatusCard(
+    status: Status,
+    onClick: (() -> Unit)? = null,
+    onOpenUser: ((String, String) -> Unit)? = null,
+) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
             .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier)
             .padding(horizontal = 16.dp, vertical = 12.dp)
     ) {
-        Header(status)
+        Header(status, onOpenUser)
 
         Spacer(Modifier.height(8.dp))
         Text(
@@ -116,7 +120,7 @@ fun StatusCard(status: Status, onClick: (() -> Unit)? = null) {
 }
 
 @Composable
-private fun Header(status: Status) {
+private fun Header(status: Status, onOpenUser: ((String, String) -> Unit)?) {
     Row(verticalAlignment = Alignment.CenterVertically) {
         AsyncImage(
             model = status.user?.avatar,
@@ -124,7 +128,12 @@ private fun Header(status: Status) {
             modifier = Modifier
                 .size(40.dp)
                 .clip(CircleShape)
-                .background(MaterialTheme.colorScheme.surfaceVariant),
+                .background(MaterialTheme.colorScheme.surfaceVariant)
+                .clickable(enabled = onOpenUser != null) {
+                    status.user?.let { u ->
+                        onOpenUser?.invoke(u.idstr ?: "", u.screenName ?: "")
+                    }
+                },
             contentScale = ContentScale.Crop,
         )
         Spacer(Modifier.width(10.dp))

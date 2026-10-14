@@ -47,7 +47,10 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import coil3.compose.AsyncImage
 import com.cx.weibo.Comment
 import com.cx.weibo.Status
+import com.cx.weibo.android.data.WeiboService
 import com.cx.weibo.android.ui.common.ImageViewerDialog
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -188,7 +191,18 @@ private fun StatusBody(status: Status, onOpenDetail: (String) -> Unit) {
         }
 
         Spacer(Modifier.height(12.dp))
-        Text(status.plainText, style = MaterialTheme.typography.bodyLarge)
+
+        // 长文：服务端只下发截断版（isLongText=true），全文要单独取
+        var fullText by remember(status.idstr) { mutableStateOf<String?>(null) }
+        LaunchedEffect(status.idstr) {
+            val id = status.idstr
+            if (status.isLongText == true && id != null) {
+                fullText = withContext(Dispatchers.IO) {
+                    runCatching { WeiboService.client.longText(id) }.getOrNull()
+                }
+            }
+        }
+        Text(fullText ?: status.plainText, style = MaterialTheme.typography.bodyLarge)
 
         val images = status.imageUrls
         var viewerAt by remember { mutableStateOf<Int?>(null) }

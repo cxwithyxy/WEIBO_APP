@@ -28,6 +28,7 @@ fun main(args: Array<String>) {
             "reposts"   -> reposts(client, args.getOrNull(1))
             "search"    -> search(client, args.drop(1).joinToString(" "), args.getOrNull(1)?.toIntOrNull())
             "user"      -> user(client, args.getOrNull(1))
+            "longtext"  -> longtext(client, args.getOrNull(1))
             "logout"    -> { Files.deleteIfExists(COOKIE); println("已删除本地 cookie") }
             else        -> usage()
         }
@@ -37,8 +38,7 @@ fun main(args: Array<String>) {
     }
 }
 
-private fun usage() {
-    println(
+private fun usage() {    println(
         """
         weibo-client — 微博第三方客户端（CLI）
 
@@ -219,4 +219,17 @@ private fun user(client: WeiboClient, uid: String?) {
     val list = client.myBlog(uid = uid)
     println("用户 $uid 的微博（${list.size} 条）\n")
     printStatuses(list)
+}
+
+/** 取长文全文（服务端会把长文截断） */
+private fun longtext(client: WeiboClient, id: String?) {
+    require(!id.isNullOrBlank()) { "需要微博 id，例如：longtext 5353833081343370" }
+    if (!client.restore(COOKIE)) { println("未登录，请先 login"); return }
+    val t = client.longText(id)
+    if (t.isNullOrBlank()) {
+        println("这条不是长文，或没有全文")
+    } else {
+        println("长文全文（${t.length} 字）：")
+        println(t)
+    }
 }

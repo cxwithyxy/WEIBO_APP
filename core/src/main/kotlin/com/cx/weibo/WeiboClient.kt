@@ -79,6 +79,42 @@ class WeiboClient(engine: HttpEngine) {
         runCatching { http.gson.fromJson(raw, TimelineResp::class.java)?.statuses }.getOrNull()
             ?: emptyList()
 
+    /**
+     * 某个用户的微博列表（点头像进入）。
+     * `/ajax/statuses/mymblog?uid=X&page=N` —— 实测 `page=N` 翻页零重叠。
+     */
+    fun userTimelinePageRaw(uid: String, page: Int = 1): TimelineRaw {
+        val raw = getJson("/ajax/statuses/mymblog?uid=$uid&page=$page&feature=0")
+        val r = http.gson.fromJson(raw, MyBlogResp::class.java)
+        checkOk(r?.ok, r?.message, "用户微博")
+        return TimelineRaw(
+            raw = raw,
+            statuses = r?.data?.list ?: emptyList(),
+            nextCursor = (page + 1).toString(),
+        )
+    }
+
+    /** 用户资料（用于用户页头部展示） */
+    fun userInfo(uid: String): User? = profile(uid)
+
+    /**
+     * 取长文全文。
+     * 微博会把长文截断（`isLongText=true`，`text_raw` 只有百来字），
+     * 全文要单独调这个接口。
+     */
+    fun longText(id: String): String? {
+        val raw = getJson("/ajax/statuses/longtext?id=$id")
+        val r = http.gson.fromJson(raw, LongTextResp::class.java)
+        checkOk(r?.ok, null, "长文")
+        val d = r?.data ?: return null
+        val t = d.longTextContentRaw?.takeIf { it.isNotBlank() } ?: d.longTextContent ?: return null
+        return t.replace(TAG_RE, "").trim().takeIf { it.isNotEmpty() }
+    }
+
+    private companion object {
+        val TAG_RE = Regex("<[^>]+>")
+    }
+
     /** 首页时间线（关注的人）—— 只要第一页时用这个 */
     fun homeTimeline(count: Int = 20, sinceId: String = "0"): List<Status> =
         homeTimelinePage(sinceId, count).statuses

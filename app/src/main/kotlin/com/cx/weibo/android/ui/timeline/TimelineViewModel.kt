@@ -46,6 +46,9 @@ data class TimelineUiState(
     val cursor: String? = null,
     /** 上次读到哪条（用于重开后跳回去） */
     val anchorId: String? = null,
+    /** 「恢复位置」是否已完成 —— 只在 VM 生命周期内做一次，
+     *  否则每次切 tab 回来都会重新跳一次（踩过）。*/
+    val restored: Boolean = false,
 )
 
 private data class LoadResult(
@@ -101,6 +104,11 @@ class TimelineViewModel(app: Application) : AndroidViewModel(app) {
     fun saveAnchor(statusId: String?) {
         val kind = _ui.value.kind ?: return
         Prefs.setAnchor(ctx, kind.name, statusId)
+    }
+
+    /** 位置恢复完成（只标一次） */
+    fun markRestored() {
+        _ui.update { it.copy(restored = true) }
     }
 
     fun setFilter(f: FilterState) {
