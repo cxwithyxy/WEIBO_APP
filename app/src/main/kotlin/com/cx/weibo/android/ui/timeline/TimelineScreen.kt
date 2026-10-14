@@ -15,28 +15,40 @@ import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import android.widget.Toast
+import com.cx.weibo.Status
+import com.cx.weibo.android.data.WeiboService
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -94,6 +106,108 @@ fun TimelineScreen(
         }
     }
 
+    // ---------------- 互动：点赞 / 转发 / 评论 ----------------
+    val client = WeiboService.client
+    val ctx = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val likedIds = remember { mutableStateMapOf<String, Boolean>() }
+    var repostTarget by remember { mutableStateOf<Status?>(null) }
+    var commentTarget by remember { mutableStateOf<Status?>(null) }
+    var dialogText by remember { mutableStateOf("") }
+    var dialogBusy by remember { mutableStateOf(false) }
+
+    fun toast(msg: String) = Toast.makeText(ctx, msg, Toast.LENGTH_SHORT).show()
+
+    fun toggleLike(s: Status) {
+        val id = s.idstr ?: return
+        val wasLiked = likedIds[id] == true
+        likedIds[id] = !wasLiked // 乐观更新
+        scope.launch {
+            val r = withContext(Dispatchers.IO) {
+                runCatching { if (wasLiked) client.cancelLike(id) else client.setLike(id) }
+            }
+            r.onSuccess { toast(if (wasLiked) "已取消赞" else "已点赞") }
+                .onFailure {
+                    likedIds[id] = wasLiked // 失败回滚
+                    toast("操作失败：${it.message}")
+                }
+        }
+    }
+
+    // 转发弹窗
+    repostTarget?.let { target ->
+        AlertDialog(
+            onDismissRequest = { if (!dialogBusy) { repostTarget = null; dialogText = "" } },
+            title = { Text("转发") },
+            text = {
+                OutlinedTextField(
+                    value = dialogText,
+                    onValueChange = { dialogText = it },
+                    placeholder = { Text("说点什么（可留空）") },
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    enabled = !dialogBusy,
+                    onClick = {
+                        val id = target.idstr ?: return@TextButton
+                        dialogBusy = true
+                        scope.launch {
+                            val r = withContext(Dispatchers.IO) {
+                                runCatching { client.repost(id, dialogText) }
+                            }
+                            dialogBusy = false
+                            r.onSuccess {
+                                toast("已转发"); repostTarget = null; dialogText = ""
+                            }.onFailure { toast("转发失败：${it.message}") }
+                        }
+                    },
+                ) { Text(if (dialogBusy) "发送中…" else "转发") }
+            },
+            dismissButton = {
+                TextButton(onClick = { repostTarget = null; dialogText = "" }) { Text("取消") }
+            },
+        )
+    }
+
+    // 评论弹窗
+    commentTarget?.let { target ->
+        AlertDialog(
+            onDismissRequest = { if (!dialogBusy) { commentTarget = null; dialogText = "" } },
+            title = { Text("评论") },
+            text = {
+                OutlinedTextField(
+                    value = dialogText,
+                    onValueChange = { dialogText = it },
+                    placeholder = { Text("写评论…") },
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    enabled = !dialogBusy && dialogText.isNotBlank(),
+                    onClick = {
+                        val id = target.idstr ?: return@TextButton
+                        dialogBusy = true
+                        scope.launch {
+                            val r = withContext(Dispatchers.IO) {
+                                runCatching { client.comment(id, dialogText) }
+                            }
+                            dialogBusy = false
+                            r.onSuccess {
+                                toast("已评论"); commentTarget = null; dialogText = ""
+                            }.onFailure { toast("评论失败：${it.message}") }
+                        }
+                    },
+                ) { Text(if (dialogBusy) "发送中…" else "发送") }
+            },
+            dismissButton = {
+                TextButton(onClick = { commentTarget = null; dialogText = "" }) { Text("取消") }
+            },
+        )
+    }
+
     Column(Modifier.fillMaxSize()) {
         FilterBar(ui.filter, ui.raw.size, ui.items.size, vm::setFilter)
         HorizontalDivider(color = MaterialTheme.colorScheme.outline)
@@ -128,9 +242,13 @@ fun TimelineScreen(
                 else -> LazyColumn(state = listState, modifier = Modifier.fillMaxSize()) {
                     items(ui.items, key = { it.idstr ?: it.hashCode().toString() }) { s ->
                         StatusCard(
-                            s,
+                            status = s,
                             onClick = { s.idstr?.let(onOpenDetail) },
                             onOpenUser = onOpenUser,
+                            onLike = { toggleLike(s) },
+                            onRepost = { repostTarget = s; dialogText = "" },
+                            onComment = { commentTarget = s; dialogText = "" },
+                            liked = likedIds[s.idstr] == true,
                         )
                     }
                     if (ui.loadingMore) {

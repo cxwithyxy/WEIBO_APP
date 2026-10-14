@@ -38,6 +38,11 @@ fun StatusCard(
     status: Status,
     onClick: (() -> Unit)? = null,
     onOpenUser: ((String, String) -> Unit)? = null,
+    onLike: (() -> Unit)? = null,
+    onRepost: (() -> Unit)? = null,
+    onComment: (() -> Unit)? = null,
+    liked: Boolean = false,
+    likeDelta: Int = 0,
 ) {
     Column(
         modifier = Modifier
@@ -108,10 +113,15 @@ fun StatusCard(
         }
 
         Spacer(Modifier.height(8.dp))
-        Row(horizontalArrangement = Arrangement.spacedBy(20.dp)) {
-            Metric("转发", status.repostsCount)
-            Metric("评论", status.commentsCount)
-            Metric("赞", status.attitudesCount)
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Metric("转发", status.repostsCount, onClick = onRepost)
+            Metric("评论", status.commentsCount, onClick = onComment)
+            Metric(
+                label = "赞",
+                n = (status.attitudesCount ?: 0) + likeDelta,
+                onClick = onLike,
+                highlight = liked,
+            )
         }
 
         Spacer(Modifier.height(10.dp))
@@ -153,10 +163,19 @@ private fun Header(status: Status, onOpenUser: ((String, String) -> Unit)?) {
 }
 
 @Composable
-private fun Metric(label: String, n: Int?) {
+private fun Metric(
+    label: String,
+    n: Int?,
+    onClick: (() -> Unit)? = null,
+    highlight: Boolean = false,
+) {
     Text(
         text = "$label ${n ?: 0}",
         style = MaterialTheme.typography.labelSmall,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        color = if (highlight) MaterialTheme.colorScheme.primary
+        else MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = Modifier
+            .then(if (onClick != null) Modifier.clickable { onClick() } else Modifier)
+            .padding(horizontal = 6.dp, vertical = 6.dp),
     )
 }

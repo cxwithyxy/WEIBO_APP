@@ -29,6 +29,13 @@ fun main(args: Array<String>) {
             "search"    -> search(client, args.drop(1).joinToString(" "), args.getOrNull(1)?.toIntOrNull())
             "user"      -> user(client, args.getOrNull(1))
             "longtext"  -> longtext(client, args.getOrNull(1))
+            "like"      -> doLike(client, args.toList(), true)
+            "unlike"    -> doLike(client, args.toList(), false)
+            "repost"    -> doRepost(client, args.toList())
+            "comment"   -> doComment(client, args.toList())
+            "fav"       -> doFav(client, args.toList())
+            "delete"    -> doDelete(client, args.toList())
+            "mylatest"  -> doMyLatest(client)
             "logout"    -> { Files.deleteIfExists(COOKIE); println("已删除本地 cookie") }
             else        -> usage()
         }
@@ -232,4 +239,76 @@ private fun longtext(client: WeiboClient, id: String?) {
         println("长文全文（${t.length} 字）：")
         println(t)
     }
+}
+
+// ==================== 互动（写操作）====================
+// 这些会在真实账号上产生效果（点赞会通知对方、评论/转发是公开发布）。
+// 因此**必须显式带 --yes** 才会执行，避免误触。
+
+private fun needYes(args: List<String>, what: String): Boolean {
+    if (args.contains("--yes")) return true
+    println("⚠ $what 会在你的真实微博账号上生效（对方会收到通知，或内容公开可见）。")
+    println("  确认要执行就加上 --yes，例如：$what ... --yes")
+    return false
+}
+
+private fun doLike(client: WeiboClient, args: List<String>, on: Boolean) {
+    val id = args.getOrNull(1)?.takeIf { it.isNotBlank() }
+    requireNotNull(id) { "需要微博 id" }
+    if (!needYes(args, if (on) "点赞" else "取消赞")) return
+    if (!client.restore(COOKIE)) { println("未登录，请先 login"); return }
+    if (on) client.setLike(id) else client.cancelLike(id)
+    println(if (on) "✓ 已点赞 $id" else "✓ 已取消赞 $id")
+}
+
+private fun doRepost(client: WeiboClient, args: List<String>) {
+    val id = args.getOrNull(1)?.takeIf { it.isNotBlank() }
+    requireNotNull(id) { "需要微博 id" }
+    val text = args.drop(2).filter { it != "--yes" }.joinToString(" ").trim()
+    if (!needYes(args, "转发")) return
+    if (!client.restore(COOKIE)) { println("未登录，请先 login"); return }
+    client.repost(id, text)
+    println("✓ 已转发 $id")
+}
+
+private fun doComment(client: WeiboClient, args: List<String>) {
+    val id = args.getOrNull(1)?.takeIf { it.isNotBlank() }
+    requireNotNull(id) { "需要微博 id" }
+    val text = args.drop(2).filter { it != "--yes" }.joinToString(" ").trim()
+    require(text.isNotBlank()) { "评论内容不能为空" }
+    if (!needYes(args, "评论")) return
+    if (!client.restore(COOKIE)) { println("未登录，请先 login"); return }
+    client.comment(id, text)
+    println("✓ 已评论 $id")
+}
+
+private fun doFav(client: WeiboClient, args: List<String>) {
+    val id = args.getOrNull(1)?.takeIf { it.isNotBlank() }
+    requireNotNull(id) { "需要微博 id" }
+    val off = args.contains("--off")
+    if (!needYes(args, if (off) "取消收藏" else "收藏")) return
+    if (!client.restore(COOKIE)) { println("未登录，请先 login"); return }
+    client.favorite(id, !off)
+    println(if (off) "✓ 已取消收藏 $id" else "✓ 已收藏 $id")
+}
+
+/** 删除自己发的微博（用于清理测试转发） */
+private fun doDelete(client: WeiboClient, args: List<String>) {
+    val id = args.getOrNull(1)?.takeIf { it.isNotBlank() }
+    requireNotNull(id) { "需要微博 id" }
+    if (!args.contains("--yes")) { println("⚠ 删除不可撤销，确认请加 --yes"); return }
+    if (!client.restore(COOKIE)) { println("未登录，请先 login"); return }
+    client.destroyStatus(id)
+    println("✓ 已删除 $id")
+}
+
+/** 我发的最新一条（用于找到刚转发的微博） */
+private fun doMyLatest(client: WeiboClient) {
+    if (!client.restore(COOKIE)) { println("未登录，请先 login"); return }
+    val list = client.myBlog(page = 1)
+    val s = list.firstOrNull()
+    if (s == null) { println("（没有微博）"); return }
+    println("idstr : ${s.idstr}")
+    println("时间  : ${s.createdAt}")
+    println("内容  : ${(s.plainText).take(60)}")
 }

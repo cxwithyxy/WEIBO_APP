@@ -328,6 +328,8 @@ class WeiboHttp(
             cookieHeader(uri.host).takeIf { it.isNotEmpty() }?.let { put("Cookie", it) }
             referer?.let { put("Referer", it) }
             if (ajax) put("X-Requested-With", "XMLHttpRequest")
+            // 写接口要 CSRF 双提交：cookie `XSRF-TOKEN` + 请求头 `X-XSRF-TOKEN`（少了会 ok=0 invalid csrf token）
+            cookieValue("XSRF-TOKEN")?.takeIf { it.isNotEmpty() }?.let { put("X-XSRF-TOKEN", it) }
             if (body != null) put("Content-Type", "application/x-www-form-urlencoded")
         }
         val resp = engine.execute(
@@ -380,6 +382,16 @@ class WeiboHttp(
     fun cookieHeaderString(): String = jar.entries.joinToString("; ") { "${it.key.name}=${it.value}" }
 
     fun isLoggedIn(): Boolean = jar.keys.any { it.name == "SUB" }
+
+    /**
+     * 确保拿到 CSRF 令牌。
+     * 它由服务端在访问 weibo.com 主页时通过 Set-Cookie 下发（XSRF-TOKEN），
+     * H5 登录流程不一定经过主页，所以写操作前补一次。
+     */
+    fun ensureXsrf() {
+        if (cookieValue("XSRF-TOKEN") != null) return
+        runCatching { get("$HOST_WEIBO/") }
+    }
 
     /** 保存 cookie（TSV：domain \t path \t name \t value） */
     fun saveCookies(path: Path) {

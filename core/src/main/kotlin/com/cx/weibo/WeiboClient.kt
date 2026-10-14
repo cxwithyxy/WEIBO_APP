@@ -115,6 +115,85 @@ class WeiboClient(engine: HttpEngine) {
         val TAG_RE = Regex("<[^>]+>")
     }
 
+    // ==================== 互动（写操作） ====================
+
+    private fun mutation(path: String, form: Map<String, String>, referer: String): String {
+        http.ensureXsrf()
+        return http.postForm("$HOST_WEIBO$path", form, referer = referer, ajax = true)
+    }
+
+    /** 写操作统一校验：ok 存在且非 1 才算失败（部分接口不返回 ok） */
+    private fun checkMutation(raw: String, what: String) {
+        val obj = runCatching { http.gson.fromJson(raw, com.google.gson.JsonObject::class.java) }
+            .getOrNull() ?: throw WeiboException("$what 失败：响应无法解析（${raw.take(120)}）")
+        val ok = obj.get("ok")?.let { runCatching { it.asInt }.getOrNull() }
+        if (ok != null && ok != 1) {
+            val msg = obj.get("msg")?.asString ?: obj.get("message")?.asString ?: ""
+            throw WeiboException("$what 失败: ok=$ok $msg")
+        }
+    }
+
+    /** 点赞。`id` 用微博的 idstr/mid。 */
+    fun setLike(id: String) {
+        val r = mutation("/ajax/statuses/setLike", linkedMapOf("id" to id), "https://weibo.com/detail/$id")
+        checkMutation(r, "点赞")
+    }
+
+    /** 取消赞 */
+    fun cancelLike(id: String) {
+        val r = mutation("/ajax/statuses/cancelLike", linkedMapOf("id" to id), "https://weibo.com/detail/$id")
+        checkMutation(r, "取消赞")
+    }
+
+    /** 转发。`text` 为空时用默认文案；`alsoComment` 表示同时评论。 */
+    fun repost(id: String, text: String = "", alsoComment: Boolean = false, picId: String = "") {
+        val r = mutation(
+            "/ajax/statuses/repost",
+            linkedMapOf(
+                "id" to id,
+                "comment" to text.trim().ifBlank { "转发微博" },
+                "is_comment" to if (alsoComment) "1" else "0",
+                "pic_id" to picId,
+            ),
+            "https://weibo.com/detail/$id",
+        )
+        checkMutation(r, "转发")
+    }
+
+    /** 发评论；`replyToCid` 非空时为回复某条评论。 */
+    fun comment(id: String, text: String, replyToCid: String? = null, alsoRepost: Boolean = false, picId: String = "") {
+        val form = linkedMapOf(
+            "id" to id,
+            "comment" to text,
+            "pic_id" to picId,
+            "is_repost" to if (alsoRepost) "1" else "0",
+            "comment_ori" to "0",
+            "is_comment" to "0",
+            "fp" to "",
+        )
+        val path = if (!replyToCid.isNullOrBlank()) {
+            form["cid"] = replyToCid
+            "/ajax/comments/reply"
+        } else {
+            "/ajax/comments/create"
+        }
+        checkMutation(mutation(path, form, "https://weibo.com/detail/$id"), "评论")
+    }
+
+    /** 收藏 / 取消收藏 */
+    fun favorite(id: String, on: Boolean = true) {
+        val path = if (on) "/ajax/statuses/createFavorites" else "/ajax/statuses/destoryFavorites"
+        checkMutation(
+            mutation(path, linkedMapOf("id" to id), "https://weibo.com/fav"),
+            if (on) "收藏" else "取消收藏",
+        )
+    }
+
+    /** 删除自己发的微博 */
+    fun destroyStatus(id: String) {
+        checkMutation(mutation("/ajax/statuses/destroy", linkedMapOf("id" to id), "https://weibo.com/detail/$id"), "删除微博")
+    }
+
     /** 首页时间线（关注的人）—— 只要第一页时用这个 */
     fun homeTimeline(count: Int = 20, sinceId: String = "0"): List<Status> =
         homeTimelinePage(sinceId, count).statuses
