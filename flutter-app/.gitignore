@@ -1,0 +1,10 @@
+# Flutter / Dart
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+build/
+*.iml
+
+# Rust（cargokit 会在 build/ 下交叉编译）
+rust/target/
+rust_builder/cargokit/build_tool/.dart_tool/

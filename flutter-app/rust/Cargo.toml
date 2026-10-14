@@ -1,0 +1,23 @@
+[package]
+name = "weibo_flutter_bridge"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+crate-type = ["cdylib", "staticlib"]
+
+[dependencies]
+flutter_rust_bridge = "=2.13.0"
+
+# 真正的业务核心（微博 API / 登录 / cookie / 解析）。
+# 与 Android 版共用同一份代码 —— 这是「一套 core，两个 UI」的关键。
+weibo-core = { path = "../../rust" }
+
+# FRB 在 Tokio 运行时上执行同步函数，而 core 用的是 reqwest::blocking。
+# 必须用 spawn_blocking 把阻塞调用挪到阻塞线程池，否则 panic：
+#   "Cannot drop a runtime in a context where blocking is not allowed."
+# 详见 src/api/weibo.rs 的 on_blocking_pool / 文件底部回归测试。
+tokio = { version = "1", features = ["rt"] }
+
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(frb_expand)'] }
