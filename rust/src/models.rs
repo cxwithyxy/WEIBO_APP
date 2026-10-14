@@ -33,11 +33,31 @@ where
     }
 }
 
+/// 宽松地把「标量」反序列化成 `String`。
+///
+/// 微博接口经常把**同一个字段时而给字符串、时而给数字**（实测 `max_id` 给的是
+/// 数字，而 `max_id_str` 是字符串）。原 Kotlin 用 Gson——它会自动把数字强转成
+/// String，所以从来没暴露；serde 是严格类型，数字给 `String` 会直接报错。
+/// 这里显式做同样的兼容，保持与原实现一致的行为。
+fn de_scalar_string<'de, D>(d: D) -> Result<Option<String>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let v = Option::<serde_json::Value>::deserialize(d)?;
+    Ok(v.and_then(|x| match x {
+        serde_json::Value::Null => None,
+        serde_json::Value::String(s) => Some(s),
+        serde_json::Value::Number(n) => Some(n.to_string()),
+        serde_json::Value::Bool(b) => Some(b.to_string()),
+        other => Some(other.to_string()),
+    }))
+}
+
 // ------------------------------------------------------------------ 模型
 
 #[derive(uniffi::Record, Clone, Debug, Default, Serialize, Deserialize)]
 pub struct User {
-    #[serde(default)]
+    #[serde(default, deserialize_with = "de_scalar_string")]
     pub idstr: Option<String>,
     #[serde(default, rename = "screen_name")]
     pub screen_name: Option<String>,
@@ -75,7 +95,7 @@ pub struct PicInfo {
 
 #[derive(uniffi::Record, Clone, Debug, Default, Serialize, Deserialize)]
 pub struct Status {
-    #[serde(default)]
+    #[serde(default, deserialize_with = "de_scalar_string")]
     pub idstr: Option<String>,
     #[serde(default, rename = "created_at")]
     pub created_at: Option<String>,
@@ -184,7 +204,7 @@ pub struct HotItem {
 
 #[derive(uniffi::Record, Clone, Debug, Default, Serialize, Deserialize)]
 pub struct Comment {
-    #[serde(default)]
+    #[serde(default, deserialize_with = "de_scalar_string")]
     pub idstr: Option<String>,
     #[serde(default, rename = "created_at")]
     pub created_at: Option<String>,
@@ -264,13 +284,14 @@ pub(crate) struct TimelineResp {
     pub message: Option<String>,
     #[serde(default)]
     pub statuses: Option<Vec<Status>>,
-    #[serde(default)]
+    // ⚠ 这几个 id 字段服务端会给**数字**（max_id 尤其），必须宽松处理
+    #[serde(default, deserialize_with = "de_scalar_string")]
     pub since_id: Option<String>,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "de_scalar_string")]
     pub max_id: Option<String>,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "de_scalar_string")]
     pub since_id_str: Option<String>,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "de_scalar_string")]
     pub max_id_str: Option<String>,
 }
 
@@ -286,7 +307,7 @@ pub(crate) struct MyBlogResp {
 pub(crate) struct MyBlogData {
     #[serde(default)]
     pub list: Option<Vec<Status>>,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "de_scalar_string")]
     pub since_id: Option<String>,
 }
 

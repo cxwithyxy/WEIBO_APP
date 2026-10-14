@@ -103,7 +103,7 @@ impl WeiboClient {
         let raw = self.get_json(format!(
             "/ajax/feed/unreadfriendstimeline?since_id={since_id}&refresh=1&count={count}"
         ))?;
-        let r: TimelineResp = serde_json::from_str(&raw).unwrap_or_default();
+        let r: TimelineResp = self.parse(&raw)?;
         self.check_ok(r.ok, r.message.as_deref(), "首页时间线")?;
         Ok(TimelineRaw {
             raw,
@@ -127,7 +127,7 @@ impl WeiboClient {
         page: u32,
     ) -> Result<TimelineRaw, WeiboError> {
         let raw = self.get_json(format!("/ajax/statuses/mymblog?uid={uid}&page={page}&feature=0"))?;
-        let r: MyBlogResp = serde_json::from_str(&raw).unwrap_or_default();
+        let r: MyBlogResp = self.parse(&raw)?;
         self.check_ok(r.ok, r.message.as_deref(), "用户微博")?;
         Ok(TimelineRaw {
             raw,
@@ -143,7 +143,7 @@ impl WeiboClient {
     /// 取长文全文（服务端会把长文截断）
     pub fn long_text(&self, id: String) -> Result<Option<String>, WeiboError> {
         let raw = self.get_json(format!("/ajax/statuses/longtext?id={id}"))?;
-        let r: LongTextResp = serde_json::from_str(&raw).unwrap_or_default();
+        let r: LongTextResp = self.parse(&raw)?;
         self.check_ok(r.ok, None, "长文")?;
         let Some(d) = r.data else { return Ok(None) };
         let t = d
@@ -169,7 +169,7 @@ impl WeiboClient {
         count: u32,
     ) -> Result<TimelineRaw, WeiboError> {
         let raw = self.get_json(format!("/ajax/feed/friendstimeline?page={page}&count={count}"))?;
-        let r: TimelineResp = serde_json::from_str(&raw).unwrap_or_default();
+        let r: TimelineResp = self.parse(&raw)?;
         self.check_ok(r.ok, r.message.as_deref(), "关注时间线")?;
         Ok(TimelineRaw {
             raw,
@@ -188,7 +188,7 @@ impl WeiboClient {
             WeiboError::protocol("未知 uid，请先 restore/whoami")
         })?;
         let json = self.get_json(format!("/ajax/statuses/mymblog?uid={u}&page={page}&feature=0"))?;
-        let r: MyBlogResp = serde_json::from_str(&json).unwrap_or_default();
+        let r: MyBlogResp = self.parse(&json)?;
         self.check_ok(r.ok, r.message.as_deref(), "微博列表")?;
         Ok(r.data.and_then(|d| d.list).unwrap_or_default())
     }
@@ -200,7 +200,7 @@ impl WeiboClient {
             .or_else(|| self.uid())
             .ok_or_else(|| WeiboError::protocol("需要 uid"))?;
         let json = self.get_json(format!("/ajax/profile/info?uid={u}"))?;
-        let r: ProfileInfoResp = serde_json::from_str(&json).unwrap_or_default();
+        let r: ProfileInfoResp = self.parse(&json)?;
         self.check_ok(r.ok, r.message.as_deref(), "用户资料")?;
         Ok(r.data.and_then(|d| d.user))
     }
@@ -212,7 +212,7 @@ impl WeiboClient {
             .or_else(|| self.uid())
             .ok_or_else(|| WeiboError::protocol("需要 uid"))?;
         let json = self.get_json(format!("/ajax/profile/followContent?uid={u}"))?;
-        let r: FollowResp = serde_json::from_str(&json).unwrap_or_default();
+        let r: FollowResp = self.parse(&json)?;
         self.check_ok(r.ok, r.message.as_deref(), "关注列表")?;
         Ok(r.data
             .and_then(|d| d.follows)
@@ -223,7 +223,7 @@ impl WeiboClient {
     /// 热搜榜（公开接口，不需要登录）
     pub fn hot_search(&self) -> Result<Vec<HotItem>, WeiboError> {
         let json = self.get_json("/ajax/side/hotSearch".to_string())?;
-        let r: HotResp = serde_json::from_str(&json).unwrap_or_default();
+        let r: HotResp = self.parse(&json)?;
         self.check_ok(r.ok, r.message.as_deref(), "热搜")?;
         Ok(r.data.and_then(|d| d.realtime).unwrap_or_default())
     }
@@ -231,7 +231,7 @@ impl WeiboClient {
     /// 热搜榜单详情
     pub fn hot_band(&self, band_id: u32, count: u32) -> Result<Vec<HotBandItem>, WeiboError> {
         let json = self.get_json(format!("/ajax/statuses/hot_band?band_id={band_id}&count={count}"))?;
-        let r: HotBandResp = serde_json::from_str(&json).unwrap_or_default();
+        let r: HotBandResp = self.parse(&json)?;
         self.check_ok(r.ok, r.message.as_deref(), "热搜榜单")?;
         Ok(r.data.and_then(|d| d.band_list).unwrap_or_default())
     }
@@ -269,7 +269,7 @@ impl WeiboClient {
             "/ajax/statuses/buildComments?is_reload=1&id={mid}&is_show_bulletin=2\
              &is_mix=0&count={count}&max_id={max_id}&flow={flow}"
         ))?;
-        let r: CommentsResp = serde_json::from_str(&json).unwrap_or_default();
+        let r: CommentsResp = self.parse(&json)?;
         self.check_ok(r.ok, r.message.as_deref(), "评论")?;
         Ok(CommentPage {
             comments: r.data.unwrap_or_default(),
@@ -281,7 +281,7 @@ impl WeiboClient {
     /// 转发列表
     pub fn reposts(&self, mid: String, page: u32) -> Result<Vec<Status>, WeiboError> {
         let json = self.get_json(format!("/ajax/statuses/repostTimeline?id={mid}&page={page}"))?;
-        let r: RepostResp = serde_json::from_str(&json).unwrap_or_default();
+        let r: RepostResp = self.parse(&json)?;
         self.check_ok(r.ok, r.message.as_deref(), "转发列表")?;
         Ok(r.data.unwrap_or_default())
     }
@@ -289,7 +289,7 @@ impl WeiboClient {
     /// 搜索微博
     pub fn search(&self, q: String, count: u32, page: u32) -> Result<Vec<Status>, WeiboError> {
         let json = self.get_json(format!("/ajax/statuses/search?q={}&count={count}&page={page}", enc(&q)))?;
-        let r: SearchResp = serde_json::from_str(&json).unwrap_or_default();
+        let r: SearchResp = self.parse(&json)?;
         self.check_ok(r.ok, r.message.as_deref(), "搜索")?;
         Ok(r.statuses.unwrap_or_default())
     }
@@ -430,6 +430,21 @@ impl WeiboClient {
             .get(format!("{HOST_WEIBO}{path}"), Some(self.referer()), true)
     }
 
+    /// 解析响应 JSON。
+    ///
+    /// 之前这里用 `unwrap_or_default()`，把 serde 的解析错误**静默吞掉**，
+    /// 对外只表现为「响应没有 ok 字段」，极难排查（真的踩过一次）。
+    /// 现在把原始错误暴露出来（与原 Kotlin 抛出 JsonSyntaxException 的行为一致）。
+    fn parse<T: serde::de::DeserializeOwned>(&self, raw: &str) -> Result<T, WeiboError> {
+        serde_json::from_str(raw).map_err(|e| {
+            let head: String = raw.chars().take(160).collect();
+            WeiboError::protocol(format!(
+                "响应解析失败: {e}（响应 {} 字节，开头：{head}）",
+                raw.len()
+            ))
+        })
+    }
+
     fn check_ok(&self, ok: Option<i32>, message: Option<&str>, ctx: &str) -> Result<(), WeiboError> {
         if ok != Some(1) {
             let hint = if ok.is_none() {
@@ -505,6 +520,40 @@ pub fn parse_uid(html: &str) -> Option<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn timeline_ids_accept_numbers() {
+        // 微博的 max_id / since_id 实际给的是**数字**（max_id_str 才是字符串）。
+        // Gson 会自动把数字转成 String，serde 不会 —— 这里必须宽松处理，
+        // 否则整个响应解析失败（线上真的因此挂过“关注时间线”）。
+        let json = r#"{"ok":1,"statuses":[],"since_id":123456789,"max_id":987654321,
+                       "since_id_str":"123456789","max_id_str":"987654321"}"#;
+        let r: TimelineResp = serde_json::from_str(json).unwrap();
+        assert_eq!(r.ok, Some(1));
+        assert_eq!(r.max_id.as_deref(), Some("987654321"));
+        assert_eq!(r.since_id.as_deref(), Some("123456789"));
+        assert_eq!(r.max_id_str.as_deref(), Some("987654321"));
+    }
+
+    /// 用真实响应抓解析问题（诊断用）
+    /// 跑： WEIBO_FIXTURE=/tmp/x.json cargo test parse_real_fixture -- --nocapture
+    #[test]
+    fn parse_real_fixture() {
+        let path = std::env::var("WEIBO_FIXTURE")
+            .unwrap_or_else(|_| "/tmp/friendstimeline.json".into());
+        let raw = match std::fs::read_to_string(&path) {
+            Ok(r) => r,
+            Err(_) => return, // 没夹具就跳过
+        };
+        match serde_json::from_str::<TimelineResp>(&raw) {
+            Ok(r) => println!(
+                "解析成功: ok={:?} statuses={}",
+                r.ok,
+                r.statuses.as_ref().map(|s| s.len()).unwrap_or(0)
+            ),
+            Err(e) => panic!("解析失败 → {e}"),
+        }
+    }
 
     #[test]
     fn parse_uid_from_html() {
