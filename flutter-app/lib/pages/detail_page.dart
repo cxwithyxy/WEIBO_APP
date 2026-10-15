@@ -96,38 +96,67 @@ class _DetailPageState extends State<DetailPage> with SingleTickerProviderStateM
           tooltip: '返回',
           onPressed: () => Navigator.of(context).maybePop(),
         ),
-        bottom: TabBar(
-          controller: _tabs,
-          tabs: const [Tab(text: '评论'), Tab(text: '转发')],
-        ),
       ),
-      body: Column(
-        children: [
-          if (_error != null)
-            Expanded(child: ErrorView(error: _error!, onRetry: _load))
-          else if (s == null)
-            const Expanded(child: Center(child: CircularProgressIndicator()))
-          else ...[
-            StatusCard(status: s, showActions: false),
-            const Divider(height: 1),
-            Expanded(
-              child: TabBarView(
-                controller: _tabs,
-                children: [
-                  _CommentsTab(
-                    mid: widget.mid,
-                    initialTotal: s.comments,
-                    controller: _commentScroll,
+      body: _error != null
+          ? ErrorView(error: _error!, onRetry: _load)
+          : s == null
+              ? const Center(child: CircularProgressIndicator())
+              // ⚠ 必须用 NestedScrollView：正文可能非常长。
+              // 早先把 StatusCard 直接放进 Column + Expanded(TabBarView)，
+              // 正文一长就把下半部分挤成 0 高度 → 整页滑不动（用户实测报的）。
+              // 现在正文是「可滚动的 header」，评论/转发的 TabBar 钉在顶部。
+              : NestedScrollView(
+                  headerSliverBuilder: (context, _) => [
+                    SliverToBoxAdapter(
+                      child: StatusCard(status: s, showActions: false),
+                    ),
+                    SliverPersistentHeader(
+                      pinned: true,
+                      delegate: _PinnedTabBar(
+                        TabBar(
+                          controller: _tabs,
+                          tabs: const [Tab(text: '评论'), Tab(text: '转发')],
+                        ),
+                        Theme.of(context).colorScheme.surface,
+                      ),
+                    ),
+                  ],
+                  body: TabBarView(
+                    controller: _tabs,
+                    children: [
+                      _CommentsTab(
+                        mid: widget.mid,
+                        initialTotal: s.comments,
+                        controller: _commentScroll,
+                      ),
+                      _RepostsTab(mid: widget.mid, controller: _repostScroll),
+                    ],
                   ),
-                  _RepostsTab(mid: widget.mid, controller: _repostScroll),
-                ],
-              ),
-            ),
-          ],
-        ],
-      ),
+                ),
     );
   }
+}
+
+/// 钉在顶部的 TabBar（NestedScrollView 的 pinned header）
+class _PinnedTabBar extends SliverPersistentHeaderDelegate {
+  _PinnedTabBar(this.tabBar, this.background);
+
+  final TabBar tabBar;
+  final Color background;
+
+  @override
+  double get minExtent => tabBar.preferredSize.height;
+
+  @override
+  double get maxExtent => tabBar.preferredSize.height;
+
+  @override
+  Widget build(BuildContext context, double shrinkOffset, bool overlapsContent) =>
+      ColoredBox(color: background, child: tabBar);
+
+  @override
+  bool shouldRebuild(_PinnedTabBar oldDelegate) =>
+      oldDelegate.tabBar != tabBar || oldDelegate.background != background;
 }
 
 // ------------------------------------------------------------------ 评论
@@ -240,6 +269,8 @@ class _CommentsTabState extends State<_CommentsTab> with AutomaticKeepAliveClien
       onRefresh: _load,
       child: ListView.separated(
         controller: _scroll,
+        // NestedScrollView 里必须显式给 physics，否则内容不满一屏时无法配合外层滚动
+        physics: const AlwaysScrollableScrollPhysics(),
         itemCount: _items.length + 1,
         separatorBuilder: (_, _) => const Divider(height: 1),
         itemBuilder: (context, i) {
@@ -461,6 +492,7 @@ class _RepostsTabState extends State<_RepostsTab> with AutomaticKeepAliveClientM
       onRefresh: _load,
       child: ListView.separated(
         controller: _scroll,
+        physics: const AlwaysScrollableScrollPhysics(),
         itemCount: _items.length + 1,
         separatorBuilder: (_, _) => const Divider(height: 1),
         itemBuilder: (context, i) {

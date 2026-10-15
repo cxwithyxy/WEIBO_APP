@@ -1,5 +1,6 @@
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_cache_manager/flutter_cache_manager.dart';
 
 import '../src/rust/api/error.dart';
 import '../src/rust/api/weibo.dart' as api;
@@ -188,6 +189,52 @@ class _Thumb extends StatelessWidget {
   }
 }
 
+/// 全屏看图的单张图片：**优先大图**。
+///
+/// 两个要点：
+///  1. 列表里的配图是中等尺寸（bmiddle），全屏必须换成 `/large/`，否则放大就糊；
+///  2. **大图如果已经在磁盘缓存里，就直接呈现大图**，不要拿缩略图做占位 ——
+///     否则会出现「先看到模糊小图、再跳成清晰大图」那一下（用户反馈）。
+///     缓存里没有时才用缩略图占位，同时后台拉大图。
+class _ZoomImage extends StatelessWidget {
+  const _ZoomImage({required this.thumb});
+
+  final String thumb;
+
+  static const _broken = Icon(
+    Icons.broken_image_outlined,
+    color: Colors.white54,
+    size: 64,
+  );
+
+  @override
+  Widget build(BuildContext context) {
+    final large = api.imageLarge(url: thumb);
+    final placeholder = CachedNetworkImage(
+      imageUrl: thumb,
+      fit: BoxFit.contain,
+      errorWidget: (_, _, _) => _broken,
+    );
+
+    return FutureBuilder<FileInfo?>(
+      // 查一下大图是否已在磁盘缓存
+      future: DefaultCacheManager().getFileFromCache(large),
+      builder: (context, snap) {
+        // 还没查完 → 先用缩略图顶着，不会闪空白
+        if (snap.connectionState != ConnectionState.done) return placeholder;
+        final cached = snap.data != null;
+        return CachedNetworkImage(
+          imageUrl: large,
+          fit: BoxFit.contain,
+          // 命中缓存 → 不挂占位图，直接呈现大图
+          placeholder: cached ? null : (_, _) => placeholder,
+          errorWidget: (_, _, _) => _broken,
+        );
+      },
+    );
+  }
+}
+
 /// 全屏图片查看器（可缩放、可翻页）。
 void openImageViewer(BuildContext context, List<String> urls, int index) {
   Navigator.of(context).push(
@@ -234,23 +281,7 @@ class _ImageViewerState extends State<_ImageViewer> {
         itemBuilder: (context, i) => InteractiveViewer(
           minScale: 1,
           maxScale: 5,
-          child: Center(
-            // ⚠ 必须换成大图 URL：列表里的配图是中等尺寸（bmiddle），
-            // 直接放大就糊 —— 第一版漏了这一步（原 Compose 版用的 weiboImageLarge）。
-            child: CachedNetworkImage(
-              imageUrl: api.imageLarge(url: widget.urls[i]),
-              fit: BoxFit.contain,
-              placeholder: (_, _) => CachedNetworkImage(
-                imageUrl: widget.urls[i],
-                fit: BoxFit.contain,
-              ),
-              errorWidget: (_, _, _) => const Icon(
-                Icons.broken_image_outlined,
-                color: Colors.white54,
-                size: 64,
-              ),
-            ),
-          ),
+          child: Center(child: _ZoomImage(thumb: widget.urls[i])),
         ),
       ),
     );
