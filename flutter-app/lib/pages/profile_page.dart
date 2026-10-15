@@ -7,6 +7,7 @@ import '../widgets/common.dart';
 import '../widgets/status_card.dart';
 import 'detail_page.dart';
 import 'compose_page.dart';
+import 'settings_page.dart';
 
 /// 「我的」页：个人资料 + 我的微博 + 发微博 + 外观设置 + 退出登录。
 class ProfilePage extends StatefulWidget {
@@ -228,6 +229,13 @@ class _ProfilePageState extends State<ProfilePage> {
           ),
         ),
         _appearance(),
+        ListTile(
+          leading: const Icon(Icons.settings_outlined),
+          title: const Text('设置'),
+          onTap: () => Navigator.of(context).push(
+            MaterialPageRoute(builder: (_) => const SettingsPage()),
+          ),
+        ),
         const Divider(height: 1),
         ListTile(
           leading: const Icon(Icons.logout),

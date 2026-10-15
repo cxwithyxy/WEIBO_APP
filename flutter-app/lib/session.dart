@@ -81,15 +81,20 @@ class Session extends ChangeNotifier {
   }
 }
 
-/// 外观设置（跟随系统 / 浅色 / 深色），持久化到 SharedPreferences。
+/// 设置（外观 + 信息流过滤），持久化到 SharedPreferences。
 class Settings extends ChangeNotifier {
   Settings._();
   static final Settings instance = Settings._();
 
   static const _kTheme = 'theme_mode';
+  static const _kHideAds = 'hide_ads';
 
   ThemeMode _themeMode = ThemeMode.system;
   ThemeMode get themeMode => _themeMode;
+
+  /// 关闭广告：信息流里不显示推广微博（对应原 Compose 版的 `hideAds` 过滤项）
+  bool _hideAds = false;
+  bool get hideAds => _hideAds;
 
   Future<void> load() async {
     final sp = await SharedPreferences.getInstance();
@@ -99,6 +104,7 @@ class Settings extends ChangeNotifier {
       'dark' => ThemeMode.dark,
       _ => ThemeMode.system,
     };
+    _hideAds = sp.getBool(_kHideAds) ?? false;
     notifyListeners();
   }
 
@@ -111,5 +117,13 @@ class Settings extends ChangeNotifier {
       ThemeMode.dark => 'dark',
       ThemeMode.system => 'system',
     });
+  }
+
+  Future<void> setHideAds(bool v) async {
+    _hideAds = v;
+    // 先 notify 让界面立即响应，再落盘
+    notifyListeners();
+    final sp = await SharedPreferences.getInstance();
+    await sp.setBool(_kHideAds, v);
   }
 }

@@ -16,11 +16,16 @@ class StatusCard extends StatefulWidget {
     required this.status,
     this.onTap,
     this.showActions = true,
+    this.expandByDefault = false,
   });
 
   final StatusDto status;
   final VoidCallback? onTap;
   final bool showActions;
+
+  /// 正文**默认展开全文**（详情页「正文」tab 用）：
+  /// 长文会自动把全文拉下来直接展示，不再显示「展开全文」。
+  final bool expandByDefault;
 
   @override
   State<StatusCard> createState() => _StatusCardState();
@@ -97,7 +102,8 @@ class _StatusCardState extends State<StatusCard> {
           children: [
             _Header(status: s),
             const SizedBox(height: 8),
-            if (s.text.isNotEmpty) _BodyText(status: s),
+            if (s.text.isNotEmpty)
+              _BodyText(status: s, expandByDefault: widget.expandByDefault),
             if (s.images.isNotEmpty) ...[
               const SizedBox(height: 8),
               ImageGrid(urls: s.images),
@@ -256,9 +262,10 @@ class _Header extends StatelessWidget {
 // ------------------------------------------------------------------ 正文
 
 class _BodyText extends StatefulWidget {
-  const _BodyText({required this.status});
+  const _BodyText({required this.status, this.expandByDefault = false});
 
   final StatusDto status;
+  final bool expandByDefault;
 
   @override
   State<_BodyText> createState() => _BodyTextState();
@@ -267,6 +274,30 @@ class _BodyText extends StatefulWidget {
 class _BodyTextState extends State<_BodyText> {
   String? _full;
   bool _loading = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _maybeAutoExpand();
+  }
+
+  @override
+  void didUpdateWidget(_BodyText oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.status.id != widget.status.id) {
+      _full = null;
+      _maybeAutoExpand();
+    }
+  }
+
+  /// 详情页要求「正文默认展开全文」：长文自动拉全文（不用手动点）
+  void _maybeAutoExpand() {
+    if (!widget.expandByDefault) return;
+    if (!widget.status.isLongText || _full != null) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted && _full == null && !_loading) _loadFull();
+    });
+  }
 
   Future<void> _loadFull() async {
     setState(() => _loading = true);
@@ -291,7 +322,8 @@ class _BodyTextState extends State<_BodyText> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         SelectableText(text, style: const TextStyle(fontSize: 15.5, height: 1.45)),
-        if (widget.status.isLongText && _full == null)
+        // 默认展开模式下不再给「展开全文」按钮（已在自动拉取）
+        if (!widget.expandByDefault && widget.status.isLongText && _full == null)
           GestureDetector(
             onTap: _loading ? null : _loadFull,
             child: Padding(
@@ -301,6 +333,12 @@ class _BodyTextState extends State<_BodyText> {
                 style: const TextStyle(fontSize: 13.5, color: Color(0xFFE6162D)),
               ),
             ),
+          ),
+        if (widget.expandByDefault && widget.status.isLongText && _loading)
+          const Padding(
+            padding: EdgeInsets.only(top: 4),
+            child: Text('正在展开全文…',
+                style: TextStyle(fontSize: 12.5, color: Colors.grey)),
           ),
       ],
     );

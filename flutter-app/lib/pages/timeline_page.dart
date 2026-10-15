@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../data/cache.dart';
+import '../session.dart';
 import '../src/rust/api/dto.dart';
 import '../src/rust/api/weibo.dart' as api;
 import '../widgets/common.dart';
@@ -189,26 +190,36 @@ class _TimelinePageState extends State<TimelinePage> with AutomaticKeepAliveClie
       );
     }
 
-    return RefreshIndicator(
-      onRefresh: refresh,
-      child: ListView.separated(
-        controller: _scroll,
-        physics: const AlwaysScrollableScrollPhysics(),
-        itemCount: _items.length + 1,
-        separatorBuilder: (_, _) => const Divider(height: 1),
-        itemBuilder: (context, i) {
-          if (i == _items.length) {
-            return FooterHint(loading: _loading, hasMore: _hasMore);
-          }
-          final s = _items[i];
-          return StatusCard(
-            status: s,
-            onTap: () => Navigator.of(context).push(
-              MaterialPageRoute(builder: (_) => DetailPage(mid: s.id)),
-            ),
-          );
-        },
-      ),
+    // 「关闭广告」（设置页可切）开启时过滤掉推广微博；
+    // 用 AnimatedBuilder 监听 Settings，切换后回到列表**立即生效**。
+    return AnimatedBuilder(
+      animation: Settings.instance,
+      builder: (context, _) {
+        final visible = Settings.instance.hideAds
+            ? _items.where((s) => !s.isAd).toList(growable: false)
+            : _items;
+        return RefreshIndicator(
+          onRefresh: refresh,
+          child: ListView.separated(
+            controller: _scroll,
+            physics: const AlwaysScrollableScrollPhysics(),
+            itemCount: visible.length + 1,
+            separatorBuilder: (_, _) => const Divider(height: 1),
+            itemBuilder: (context, i) {
+              if (i == visible.length) {
+                return FooterHint(loading: _loading, hasMore: _hasMore);
+              }
+              final s = visible[i];
+              return StatusCard(
+                status: s,
+                onTap: () => Navigator.of(context).push(
+                  MaterialPageRoute(builder: (_) => DetailPage(mid: s.id)),
+                ),
+              );
+            },
+          ),
+        );
+      },
     );
   }
 }

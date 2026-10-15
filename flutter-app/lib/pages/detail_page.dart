@@ -135,6 +135,9 @@ class _DetailPageState extends State<DetailPage> with SingleTickerProviderStateM
 // ------------------------------------------------------------------ 正文
 
 /// 正文 tab。长文也能正常滚动：整页就是一个 ListView，没有嵌套滚动。
+///
+/// `expandByDefault: true` —— 用户要求：**详情页正文默认展开全文**，
+/// 不用再手动点「展开全文」。
 class _BodyTab extends StatelessWidget {
   const _BodyTab({required this.status, this.controller});
 
@@ -147,7 +150,7 @@ class _BodyTab extends StatelessWidget {
       controller: controller,
       physics: const AlwaysScrollableScrollPhysics(),
       padding: const EdgeInsets.only(bottom: 32),
-      children: [StatusCard(status: status)],
+      children: [StatusCard(status: status, expandByDefault: true)],
     );
   }
 }
