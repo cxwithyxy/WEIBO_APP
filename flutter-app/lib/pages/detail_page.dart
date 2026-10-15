@@ -151,7 +151,13 @@ class _BodyTab extends StatelessWidget {
       controller: controller,
       physics: const AlwaysScrollableScrollPhysics(),
       padding: const EdgeInsets.only(bottom: 32),
-      children: [StatusCard(status: status, expandByDefault: true)],
+      children: [
+        // 列表卡片为保证单击能进详情页，正文改用了 Text；
+        // 选择 / 复制能力挪到这里（详情页不需要"单击进详情"，无手势冲突）。
+        SelectionArea(
+          child: StatusCard(status: status, expandByDefault: true),
+        ),
+      ],
     );
   }
 }

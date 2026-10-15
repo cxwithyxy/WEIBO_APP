@@ -25,11 +25,13 @@ class HomePage extends StatefulWidget {
 class _HomePageState extends State<HomePage> {
   int _tab = 0;
 
-  static const _titles = ['首页', '关注', '搜索', '热搜', '我的'];
+  // 用户反馈：首页原先落的是「推荐流」，他觉得没必要，希望首页直接就是关注流。
+  // 于是去掉「推荐」，不再单设「关注」tab —— 首页即关注。5 个 tab → 4 个。
+  static const _titles = ['首页', '搜索', '热搜', '我的'];
 
   /// 每个 tab 一个控制器，供「双击顶部回顶部」使用。
   /// 传下去的控制器由页面使用、由这里释放（页面不会重复 dispose）。
-  final _controllers = List<ScrollController>.generate(5, (_) => ScrollController());
+  final _controllers = List<ScrollController>.generate(4, (_) => ScrollController());
 
   @override
   void dispose() {
@@ -73,11 +75,10 @@ class _HomePageState extends State<HomePage> {
       body: IndexedStack(
         index: _tab,
         children: [
-          TimelinePage(kind: TimelineKind.home, controller: _controllers[0]),
-          TimelinePage(kind: TimelineKind.following, controller: _controllers[1]),
-          SearchPage(embedded: true, controller: _controllers[2]),
-          HotPage(controller: _controllers[3]),
-          ProfilePage(onLoggedOut: widget.onLoggedOut, controller: _controllers[4]),
+          TimelinePage(kind: TimelineKind.following, controller: _controllers[0]),
+          SearchPage(embedded: true, controller: _controllers[1]),
+          HotPage(controller: _controllers[2]),
+          ProfilePage(onLoggedOut: widget.onLoggedOut, controller: _controllers[3]),
         ],
       ),
       bottomNavigationBar: NavigationBar(
@@ -86,10 +87,6 @@ class _HomePageState extends State<HomePage> {
         destinations: const [
           NavigationDestination(
               icon: Icon(Icons.home_outlined), selectedIcon: Icon(Icons.home), label: '首页'),
-          NavigationDestination(
-              icon: Icon(Icons.people_alt_outlined),
-              selectedIcon: Icon(Icons.people_alt),
-              label: '关注'),
           NavigationDestination(icon: Icon(Icons.search), label: '搜索'),
           NavigationDestination(
               icon: Icon(Icons.local_fire_department_outlined),

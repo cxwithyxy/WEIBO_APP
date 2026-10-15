@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 
 import '../src/rust/api/dto.dart';
 import '../src/rust/api/weibo.dart' as api;
+import '../pages/user_page.dart';
 import 'actions.dart';
 import 'common.dart';
 
@@ -214,7 +215,16 @@ class _Header extends StatelessWidget {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Avatar(url: u?.avatar ?? '', size: 40),
+        // 点头像 → 该用户的主页。
+        // 原 Compose 版有这个功能，移植到 Flutter 时漏了（UserPage 写好了但没人调用）。
+        GestureDetector(
+          onTap: (u == null || u.id.isEmpty)
+              ? null
+              : () => Navigator.of(context).push(
+                    MaterialPageRoute(builder: (_) => UserPage(uid: u.id)),
+                  ),
+          child: Avatar(url: u?.avatar ?? '', size: 40),
+        ),
         const SizedBox(width: 8),
         Expanded(
           child: Column(
@@ -321,7 +331,11 @@ class _BodyTextState extends State<_BodyText> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        SelectableText(text, style: const TextStyle(fontSize: 15.5, height: 1.45)),
+        // 用 Text 而不是 SelectableText：
+        // SelectableText 会**吞掉单击**，导致卡片正文区域点不进详情页
+        // （用户反馈："要点击用户名附近才能进详情页"，根因就是这里）。
+        // 需要选择/复制就去详情页 —— 那边整体包在 SelectionArea 里。
+        Text(text, style: const TextStyle(fontSize: 15.5, height: 1.45)),
         // 默认展开模式下不再给「展开全文」按钮（已在自动拉取）
         if (!widget.expandByDefault && widget.status.isLongText && _full == null)
           GestureDetector(
