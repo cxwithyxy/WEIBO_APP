@@ -36,6 +36,18 @@ android {
             signingConfig = signingConfigs.getByName("debug")
         }
     }
+
+    // ⚠️ 体积相关的关键开关（2026-10-15 测出：不加这个，26.5MB 里 25.6MB 是原生库
+    // 且**全部以 STORE 存储（0% 压缩）**）。
+    //
+    // AGP 对 minSdk≥23 默认 extractNativeLibs=false → .so 不压缩、页对齐（启动快，
+    // 但 APK 大）。打开 useLegacyPackaging 后 .so 会被 deflate 压缩，
+    // **下载体积大幅下降**（代价：安装时解压，安装足迹与首次启动略增）。
+    packaging {
+        jniLibs {
+            useLegacyPackaging = true
+        }
+    }
 }
 
 kotlin {

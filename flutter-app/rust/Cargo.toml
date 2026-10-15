@@ -21,3 +21,21 @@ tokio = { version = "1", features = ["rt"] }
 
 [lints.rust]
 unexpected_cfgs = { level = "warn", check-cfg = ['cfg(frb_expand)'] }
+
+# 体积优先的 release 配置（2026-10-15 加）。
+# 这个 crate 的产物就是最终装进 APK 的 `libweibo_flutter_bridge.so`
+# （基线 8.9MB），所以体积优化加在这里才对。
+#
+# ⚠️ 为什么这里**能**开 strip，而 rust/Cargo.toml 里特意写着「不要」：
+#   - FRB 是编译期生成代码，**不靠运行时读符号**，剥符号只影响调试；
+#   - core 的 uniffi 元数据封装在 `libweibo_core.so`（由 `rust/` 单独构建、
+#     供 uniffi-bindgen 用），与本路径产物无关。
+#
+# ⚠️ 刻意**不开** `panic = "abort"`：core 调用都走 spawn_blocking，
+#    panic 会被转成 Dart 侧的异常而不是杀进程；改成 abort 会把这个
+#    安全网拆掉（遇到意外 panic 直接闪退）。
+[profile.release]
+opt-level = "z"      # 直接为体积优化（比 "s" 更激进）
+lto = "fat"          # 跨 crate 内联 + 无用代码消除，这是省 .so 的大头
+codegen-units = 1    # 给 LTO 更大的优化空间（代价：编译变慢）
+strip = "symbols"    # 剥掉符号表
