@@ -38,9 +38,8 @@ on:
   push:
     tags:
       - 'v*'
-    branches:
-      # 仅用于 CI 构建链路自测（只构建、不发 release）。验证通过后会删掉这行。
-      - 'ci-verify'
+    # 注：曾有 branches: ['ci-verify'] 用于链路自测（只构建、不发 release），
+    # 2026-10-15 验证通过后已按计划移除。若要再自测，临时加回即可。
 
 permissions:
   contents: write
