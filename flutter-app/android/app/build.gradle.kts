@@ -16,8 +16,17 @@ val keystoreProperties = Properties().apply {
         keystorePropertiesFile.inputStream().use { load(it) }
     }
 }
-val hasReleaseKey =
-    keystorePropertiesFile.exists() && keystoreProperties.getProperty("storeFile") != null
+// 兜底默认值 = 仓库里公开的那把 key（见 keys/README.md）。
+// 为什么要兜底：静默退回 debug 签名会**悄悄**破坏「所有人的包互相覆盖安装」
+// 这个前提，而且不报错、极难发现（实际踩到过：CI 上 key.properties 没读到 →
+// 退回 debug key，与本地/官方包签名不一致）。
+val ksStoreFile = keystoreProperties.getProperty("storeFile") ?: "keys/weibo-release.jks"
+val ksStorePassword = keystoreProperties.getProperty("storePassword") ?: "weibo-release"
+val ksKeyAlias = keystoreProperties.getProperty("keyAlias") ?: "weibo"
+val ksKeyPassword = keystoreProperties.getProperty("keyPassword") ?: "weibo-release"
+val keystoreFile = rootProject.file(ksStoreFile)
+// 只以「keystore 文件在不在」为准，不依赖 key.properties
+val hasReleaseKey = keystoreFile.exists()
 
 android {
     namespace = "com.cx.weibo.android"
@@ -47,10 +56,10 @@ android {
     signingConfigs {
         if (hasReleaseKey) {
             create("release") {
-                storeFile = rootProject.file(keystoreProperties.getProperty("storeFile"))
-                storePassword = keystoreProperties.getProperty("storePassword")
-                keyAlias = keystoreProperties.getProperty("keyAlias")
-                keyPassword = keystoreProperties.getProperty("keyPassword")
+                storeFile = keystoreFile
+                storePassword = ksStorePassword
+                keyAlias = ksKeyAlias
+                keyPassword = ksKeyPassword
             }
         }
     }

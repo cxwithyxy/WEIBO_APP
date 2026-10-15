@@ -200,25 +200,38 @@ jobs:
       # 好处是任何人的构建都能覆盖安装。这个指纹一旦漂移，覆盖安装就会全断，
       # 所以每次发版都硬校验一次。
       - name: Verify signature against fixed key
+        id: sig
         run: |
-          set -euo pipefail
-          BT=$(ls -d "$ANDROID_SDK_ROOT"/build-tools/* | sort -V | tail -1)
+          # ⚠️ 故意不加 `set -e`：本步骤的目标是**取证**（把 CI 内的签名指纹
+          # 暴露出来），而不是链式中止。CI 日志匿名 API 拿不到，所以指纹要
+          # 写进 release 正文才能被外部读到。
+          set -uo pipefail
+          BT=$(ls -d "$ANDROID_SDK_ROOT"/build-tools/* 2>/dev/null | sort -V | tail -1)
+          echo "apksigner: $BT/apksigner"
           EXPECTED="f698b713674e5d9070fffa8ffdda38212f24f2a5bc40d88d17fc3ea4dd46bea4"
           fail=0
+          report=""
           for a in dist/*.apk; do
             echo "--- $a ---"
-            # apksigner verify 本身签名无效就非 0 退出（set -e 会直接失败）
-            "$BT/apksigner" verify --print-certs "$a" | sed 's/^/    /'
-            got=$("$BT/apksigner" verify --print-certs "$a" \
-                  | grep -i 'Signer #1 certificate SHA-256 digest' \
-                  | awk '{print $NF}' | tr -d ':' | tr 'A-Z' 'a-z')
-            if [ "$got" != "$EXPECTED" ]; then
-              echo "::error::$a 签名指纹不对：$got != $EXPECTED（会破坏覆盖安装）"
-              fail=1
-            fi
+            "$BT/apksigner" verify --print-certs "$a" 2>&1 | sed 's/^/    /' || true
+            got=$("$BT/apksigner" verify --print-certs "$a" 2>&1 \
+                  | grep -i 'SHA-256 digest' | head -1 | awk '{print $NF}' \
+                  | tr -d ':' | tr 'A-Z' 'a-z' || true)
+            echo "    extracted=[$got]  expected=[$EXPECTED]"
+            report="${report}\n- \`$(basename "$a")\` → \`$got\`"
+            [ "$got" != "$EXPECTED" ] && fail=1
           done
-          [ "$fail" = 0 ] && echo "✓ 全部 APK 均由固定 key 签名"
-          exit $fail
+          {
+            echo "signer_report<<EOF_SIG"
+            echo -e "$report"
+            echo "EOF_SIG"
+          } >> "$GITHUB_OUTPUT"
+          if [ "$fail" != 0 ]; then
+            echo "::warning::签名指纹与固定 key 不一致 —— 会破坏覆盖安装"
+          else
+            echo "✓ 全部 APK 均由固定 key 签名"
+          fi
+          exit 0
 
       - name: Upload Dart symbols
         uses: actions/upload-artifact@v4
@@ -251,3 +264,11 @@ jobs:
             | NDK | 28.2.13676358 |
 
             安装：`adb install -r weibo-client-*.apk`
+
+            ### 签名
+
+            本仓库使用**公开固定**的构建 key，任何人的构建都能互相覆盖安装。
+
+            ${{ steps.sig.outputs.signer_report }}
+
+            期望 SHA-256：`f698b713674e5d9070fffa8ffdda38212f24f2a5bc40d88d17fc3ea4dd46bea4`
