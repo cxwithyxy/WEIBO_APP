@@ -14,6 +14,12 @@ GeneratedPluginRegistrant.java
 key.properties
 **/*.keystore
 **/*.jks
-# 例外：上面两个要提交
+# ── 例外：下面这些要提交 ──────────────────────────────────
+# 踩过的坑：原先只 negate 了具体文件名（keys/weibo-release.jks），换文件后
+# 新的 keystore 又被**静默忽略** → CI 拿不到 keystore → 悄悄退回 runner 自带
+# debug key（不报错、极难发现，只表现为“签名指纹不同”）。
+# 所以改成目录级 negate，以后往 keys/ 放什么都不会再被吃掉。
 !key.properties
-!keys/weibo-release.jks
+!keys/
+!keys/*.keystore
+!keys/*.jks

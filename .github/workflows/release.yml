@@ -232,11 +232,10 @@ jobs:
             echo "EOF_SIG"
           } >> "$GITHUB_OUTPUT"
           if [ "$fail" != 0 ]; then
-            echo "::warning::签名指纹与固定 key 不一致 —— 会破坏覆盖安装"
-          else
-            echo "✓ 全部 APK 均由固定 key 签名"
+            echo "::error::签名指纹与固定 key 不一致 —— 会破坏覆盖安装，已中止发布"
+            exit 1
           fi
-          exit 0
+          echo "✓ 全部 APK 均由固定 key 签名"
 
       - name: Upload Dart symbols
         uses: actions/upload-artifact@v4
