@@ -1,0 +1,181 @@
+name: Build & Release APK
+
+# ─────────────────────────────────────────────────────────────────────────
+# 两种触发方式
+#   ① 点按钮：Actions 页 → 左侧「Build & Release APK」→ Run workflow
+#      可填版本号（如 v1.0.1）/ 勾选草稿 / 选目标 ABI
+#   ② 推 tag：git push origin v1.0.1  → 自动构建并发布到该 tag
+#
+# 发布动作走 workflow 内置的 GITHUB_TOKEN，**无需配置任何 secret**。
+#
+# 复刻的本地构建参数（2026-10-15 实测）：
+#   Flutter 3.47.7 stable / Dart 3.13.5
+#   Rust 1.99.0（cargokit 交叉编译到 android targets）
+#   JDK 21 · AGP 9.1.0 · Gradle 9.3.1 · Kotlin 2.4.0
+#   compileSdk 36 · targetSdk 36 · minSdk 24 · NDK 28.2.13676358
+# ─────────────────────────────────────────────────────────────────────────
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: '版本号（如 v1.0.1）；留空 = 取 pubspec.yaml 的版本'
+        required: false
+        default: ''
+      draft:
+        description: '创建为草稿（不公开）'
+        type: boolean
+        default: false
+      target_platforms:
+        description: '构建目标 ABI'
+        type: choice
+        options:
+          - android-arm64
+          - android-arm
+          - android-x64
+          - all
+        default: android-arm64
+  push:
+    tags:
+      - 'v*'
+    branches:
+      # 仅用于 CI 构建链路自测（只构建、不发 release）。验证通过后会删掉这行。
+      - 'ci-verify'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Build ${{ inputs.target_platforms || 'android-arm64' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+
+    env:
+      CARGO_TERM_COLOR: always
+      ANDROID_NDK_VERSION: '28.2.13676358'
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install NDK ${{ env.ANDROID_NDK_VERSION }}
+        run: |
+          yes | sdkmanager --licenses > /dev/null 2>&1 || true
+          sdkmanager --install "ndk;${ANDROID_NDK_VERSION}"
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.7'
+          channel: stable
+          cache: true
+
+      - name: Set up Rust (with Android targets)
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-linux-android,armv7-linux-androideabi,x86_64-linux-android
+
+      - name: Cache Rust build
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: |
+            rust -> target
+            flutter-app/rust -> target
+
+      - name: Resolve release tag
+        id: ver
+        run: |
+          set -euo pipefail
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ -n "${{ inputs.version }}" ]; then
+            TAG="${{ inputs.version }}"
+          elif [ "${{ github.ref_type }}" = "tag" ]; then
+            TAG="${{ github.ref_name }}"
+          else
+            V=$(grep -m1 '^version:' flutter-app/pubspec.yaml | sed 's/^version:[[:space:]]*//' | cut -d+ -f1)
+            TAG="v${V}"
+          fi
+          case "$TAG" in v*) ;; *) TAG="v$TAG" ;; esac
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "→ 发布版本：$TAG"
+
+      - name: flutter pub get
+        working-directory: flutter-app
+        run: flutter pub get
+
+      - name: Run tests
+        working-directory: flutter-app
+        run: flutter test
+
+      - name: Build APK
+        working-directory: flutter-app
+        run: |
+          set -euo pipefail
+          TARGET="${{ inputs.target_platforms || 'android-arm64' }}"
+          ARGS="--release"
+          if [ "$TARGET" = "all" ]; then
+            ARGS="$ARGS --split-per-abi"
+          else
+            ARGS="$ARGS --target-platform $TARGET"
+          fi
+          echo "flutter build apk $ARGS"
+          flutter build apk $ARGS
+
+      - name: Collect artifacts
+        run: |
+          set -euo pipefail
+          TAG="${{ steps.ver.outputs.tag }}"
+          mkdir -p dist
+          for f in flutter-app/build/app/outputs/flutter-apk/*-release.apk; do
+            b=$(basename "$f" -release.apk); b=${b#app-}
+            [ "$b" = "app" ] && b=universal
+            cp "$f" "dist/weibo-client-${TAG}-${b}.apk"
+          done
+          # 同时打 zip（转发到飞书时 .apk 会被拒收，.zip 可直发）
+          (cd dist && for a in *.apk; do zip -9 -q "${a%.apk}.zip" "$a"; done)
+          ls -la dist/
+
+      - name: Upload workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: apk-${{ steps.ver.outputs.tag }}
+          path: dist/*
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Create GitHub Release
+        if: startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.ver.outputs.tag }}
+          name: ${{ steps.ver.outputs.tag }}
+          files: dist/*
+          draft: ${{ inputs.draft || false }}
+          prerelease: ${{ contains(steps.ver.outputs.tag, '-') }}
+          generate_release_notes: true
+          body: |
+            ## 微博客户端 ${{ steps.ver.outputs.tag }}
+
+            GitHub Actions 自动构建 —— Flutter 3.47.7 + Rust core（cargokit 交叉编译）。
+
+            | 项 | 值 |
+            |---|---|
+            | 包名 | `com.cx.weibo.android` |
+            | 签名 | debug 调试签名（自用，非上架包） |
+            | minSdk / targetSdk | 24 / 36 |
+            | NDK | 28.2.13676358 |
+
+            安装：`adb install -r weibo-client-*.apk`
