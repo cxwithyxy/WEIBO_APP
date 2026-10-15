@@ -39,7 +39,8 @@ pub const HOST_PASSPORT: &str = "https://passport.weibo.com";
 // ------------------------------------------------------------------
 
 /// 一次「不跟随重定向、不管理 cookie」的原始请求。
-#[derive(uniffi::Record, Clone, Debug)]
+#[cfg_attr(feature = "uniffi-ffi", derive(uniffi::Record))]
+#[derive(Clone, Debug)]
 pub struct RawRequest {
     pub url: String,
     pub method: String,
@@ -48,7 +49,8 @@ pub struct RawRequest {
 }
 
 /// 原始响应。引擎**不得**跟随重定向、不得管理 cookie、不得重试。
-#[derive(uniffi::Record, Clone, Debug)]
+#[cfg_attr(feature = "uniffi-ffi", derive(uniffi::Record))]
+#[derive(Clone, Debug)]
 pub struct RawResponse {
     pub status: u16,
     pub headers: HashMap<String, Vec<String>>,
@@ -81,12 +83,13 @@ impl RawResponse {
 ///  - **不跟随重定向**，原样返回 3xx 与 Location
 ///  - **不管理 cookie**，原样回传所有 Set-Cookie
 ///  - **不自动重试**
-#[uniffi::export(with_foreign)]
+#[cfg_attr(feature = "uniffi-ffi", uniffi::export(with_foreign))]
 pub trait HttpEngine: Send + Sync {
     fn execute(&self, request: RawRequest) -> Result<RawResponse, WeiboError>;
 }
 
-#[derive(Debug, thiserror::Error, uniffi::Error)]
+#[derive(Debug, thiserror::Error)]
+#[cfg_attr(feature = "uniffi-ffi", derive(uniffi::Error))]
 pub enum WeiboError {
     // 具名字段不能叫 `message` —— uniffi 生成的 Kotlin 错误类继承 Exception，
     // 会与 `Throwable.message` 冲突导致 Kotlin 编译失败。
@@ -204,7 +207,8 @@ impl Inner {
 }
 
 /// 会话状态快照 —— 供外部观察/对比（跨平台一致性验证用）
-#[derive(uniffi::Record, Clone, Debug)]
+#[cfg_attr(feature = "uniffi-ffi", derive(uniffi::Record))]
+#[derive(Clone, Debug)]
 pub struct CookieEntry {
     pub domain: String,
     pub name: String,
@@ -221,15 +225,15 @@ struct Res {
     body: String,
 }
 
-#[derive(uniffi::Object)]
+#[cfg_attr(feature = "uniffi-ffi", derive(uniffi::Object))]
 pub struct WeiboHttp {
     engine: Arc<dyn HttpEngine>,
     inner: Mutex<Inner>,
 }
 
-#[uniffi::export]
+#[cfg_attr(feature = "uniffi-ffi", uniffi::export)]
 impl WeiboHttp {
-    #[uniffi::constructor]
+    #[cfg_attr(feature = "uniffi-ffi", uniffi::constructor)]
     pub fn new(engine: Arc<dyn HttpEngine>, ua: Option<String>) -> Arc<Self> {
         Arc::new(Self {
             engine,
@@ -462,7 +466,7 @@ pub fn enc(s: &str) -> String {
     url::form_urlencoded::byte_serialize(s.as_bytes()).collect()
 }
 
-#[uniffi::export]
+#[cfg_attr(feature = "uniffi-ffi", uniffi::export)]
 pub fn weibo_url_encode(s: String) -> String {
     enc(&s)
 }

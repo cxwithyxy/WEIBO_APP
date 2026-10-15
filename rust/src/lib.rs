@@ -7,6 +7,7 @@
 //!  - `WeiboTime.kt`   → weibo_time_* 函数
 //!  - `WeiboImages.kt` → weibo_image_large 函数
 
+#[cfg(feature = "uniffi-ffi")]
 uniffi::setup_scaffolding!();
 
 pub mod auth;
@@ -30,14 +31,14 @@ fn parse(raw: &str) -> Option<DateTime<chrono::FixedOffset>> {
 
 /// 排序用：越大越新；缺失/解析失败视为最旧（i64::MIN）。
 /// 对应 Kotlin `WeiboTime.epoch()`。
-#[uniffi::export]
+#[cfg_attr(feature = "uniffi-ffi", uniffi::export)]
 pub fn weibo_time_epoch(raw: String) -> i64 {
     parse(&raw).map(|dt| dt.timestamp_millis()).unwrap_or(i64::MIN)
 }
 
 /// 格式化为 `YYYY/MM/DD HH:mm:SS`（本地时区）；解析失败原样返回。
 /// 对应 Kotlin `WeiboTime.format()`。
-#[uniffi::export]
+#[cfg_attr(feature = "uniffi-ffi", uniffi::export)]
 pub fn weibo_time_format(raw: String) -> String {
     match parse(&raw) {
         Some(dt) => dt.with_timezone(&Local).format(OUT_FMT).to_string(),
@@ -47,7 +48,7 @@ pub fn weibo_time_format(raw: String) -> String {
 
 /// 缩略图 URL → 大图 URL。
 /// 对应 Kotlin `WeiboImages.large()`。
-#[uniffi::export]
+#[cfg_attr(feature = "uniffi-ffi", uniffi::export)]
 pub fn weibo_image_large(url: String) -> String {
     let mut s = url;
     for (from, to) in [

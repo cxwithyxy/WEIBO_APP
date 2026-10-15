@@ -55,7 +55,8 @@ where
 
 // ------------------------------------------------------------------ 模型
 
-#[derive(uniffi::Record, Clone, Debug, Default, Serialize, Deserialize)]
+#[cfg_attr(feature = "uniffi-ffi", derive(uniffi::Record))]
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
 pub struct User {
     #[serde(default, deserialize_with = "de_scalar_string")]
     pub idstr: Option<String>,
@@ -77,13 +78,15 @@ pub struct User {
     pub location: Option<String>,
 }
 
-#[derive(uniffi::Record, Clone, Debug, Default, Serialize, Deserialize)]
+#[cfg_attr(feature = "uniffi-ffi", derive(uniffi::Record))]
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
 pub struct PicUrl {
     #[serde(default)]
     pub url: Option<String>,
 }
 
-#[derive(uniffi::Record, Clone, Debug, Default, Serialize, Deserialize)]
+#[cfg_attr(feature = "uniffi-ffi", derive(uniffi::Record))]
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
 pub struct PicInfo {
     #[serde(default)]
     pub thumbnail: Option<PicUrl>,
@@ -93,7 +96,8 @@ pub struct PicInfo {
     pub large: Option<PicUrl>,
 }
 
-#[derive(uniffi::Record, Clone, Debug, Default, Serialize, Deserialize)]
+#[cfg_attr(feature = "uniffi-ffi", derive(uniffi::Record))]
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
 pub struct Status {
     #[serde(default, deserialize_with = "de_scalar_string")]
     pub idstr: Option<String>,
@@ -190,7 +194,8 @@ impl Status {
     }
 }
 
-#[derive(uniffi::Record, Clone, Debug, Default, Serialize, Deserialize)]
+#[cfg_attr(feature = "uniffi-ffi", derive(uniffi::Record))]
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
 pub struct HotItem {
     #[serde(default)]
     pub word: Option<String>,
@@ -202,7 +207,8 @@ pub struct HotItem {
     pub label: Option<String>,
 }
 
-#[derive(uniffi::Record, Clone, Debug, Default, Serialize, Deserialize)]
+#[cfg_attr(feature = "uniffi-ffi", derive(uniffi::Record))]
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
 pub struct Comment {
     #[serde(default, deserialize_with = "de_scalar_string")]
     pub idstr: Option<String>,
@@ -236,27 +242,31 @@ impl Comment {
     }
 }
 
-#[derive(uniffi::Record, Clone, Debug, Default, Serialize, Deserialize)]
+#[cfg_attr(feature = "uniffi-ffi", derive(uniffi::Record))]
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
 pub struct CommentPage {
     pub comments: Vec<Comment>,
     pub next_max_id: Option<i64>,
     pub total_number: Option<i32>,
 }
 
-#[derive(uniffi::Record, Clone, Debug, Default, Serialize, Deserialize)]
+#[cfg_attr(feature = "uniffi-ffi", derive(uniffi::Record))]
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
 pub struct TimelinePage {
     pub statuses: Vec<Status>,
     pub next_cursor: Option<String>,
 }
 
-#[derive(uniffi::Record, Clone, Debug, Default, Serialize, Deserialize)]
+#[cfg_attr(feature = "uniffi-ffi", derive(uniffi::Record))]
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
 pub struct TimelineRaw {
     pub raw: String,
     pub statuses: Vec<Status>,
     pub next_cursor: Option<String>,
 }
 
-#[derive(uniffi::Record, Clone, Debug, Default, Serialize, Deserialize)]
+#[cfg_attr(feature = "uniffi-ffi", derive(uniffi::Record))]
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
 pub struct HotBandItem {
     #[serde(default)]
     pub word: Option<String>,
@@ -428,33 +438,33 @@ pub(crate) struct LongTextData {
 // 跨 FFI 的辅助函数（Kotlin 侧调用）
 // ------------------------------------------------------------------
 
-#[uniffi::export]
+#[cfg_attr(feature = "uniffi-ffi", uniffi::export)]
 pub fn weibo_status_plain_text(s: Status) -> String {
     s.plain_text()
 }
 
-#[uniffi::export]
+#[cfg_attr(feature = "uniffi-ffi", uniffi::export)]
 pub fn weibo_status_display_time(s: Status) -> String {
     s.display_time()
 }
 
-#[uniffi::export]
+#[cfg_attr(feature = "uniffi-ffi", uniffi::export)]
 pub fn weibo_status_is_ad(s: Status) -> bool {
     s.is_ad_flag()
 }
 
-#[uniffi::export]
+#[cfg_attr(feature = "uniffi-ffi", uniffi::export)]
 pub fn weibo_status_image_urls(s: Status) -> Vec<String> {
     s.image_urls()
 }
 
-#[uniffi::export]
+#[cfg_attr(feature = "uniffi-ffi", uniffi::export)]
 pub fn weibo_comment_plain_text(c: Comment) -> String {
     c.plain_text()
 }
 
 /// 剥离 HTML 标签（导出给 Kotlin 用）
-#[uniffi::export]
+#[cfg_attr(feature = "uniffi-ffi", uniffi::export)]
 pub fn weibo_strip_tags(s: String) -> String {
     TAG_RE.replace_all(&s, "").to_string()
 }

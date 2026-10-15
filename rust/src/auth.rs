@@ -40,13 +40,15 @@ fn kt_opt<T: std::fmt::Display>(v: Option<T>) -> String {
 
 // ------------------------------------------------------------------ 类型
 
-#[derive(uniffi::Record, Clone, Debug, Default)]
+#[cfg_attr(feature = "uniffi-ffi", derive(uniffi::Record))]
+#[derive(Clone, Debug, Default)]
 pub struct QrSession {
     pub qrid: String,
     pub image_url: String,
 }
 
-#[derive(uniffi::Enum, Clone, Copy, Debug, PartialEq, Eq)]
+#[cfg_attr(feature = "uniffi-ffi", derive(uniffi::Enum))]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum QrState {
     Waiting,
     Scanned,
@@ -55,7 +57,8 @@ pub enum QrState {
     Error,
 }
 
-#[derive(uniffi::Record, Clone, Debug, Default)]
+#[cfg_attr(feature = "uniffi-ffi", derive(uniffi::Record))]
+#[derive(Clone, Debug, Default)]
 pub struct QrStatus {
     pub state: QrState,
     pub url: Option<String>,
@@ -97,14 +100,14 @@ struct QrCheckData {
 
 // ------------------------------------------------------------------ 实现
 
-#[derive(uniffi::Object)]
+#[cfg_attr(feature = "uniffi-ffi", derive(uniffi::Object))]
 pub struct WeiboAuth {
     http: Arc<WeiboHttp>,
 }
 
-#[uniffi::export]
+#[cfg_attr(feature = "uniffi-ffi", uniffi::export)]
 impl WeiboAuth {
-    #[uniffi::constructor]
+    #[cfg_attr(feature = "uniffi-ffi", uniffi::constructor)]
     pub fn new(http: Arc<WeiboHttp>) -> Arc<Self> {
         Arc::new(Self { http })
     }

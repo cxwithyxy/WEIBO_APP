@@ -8,7 +8,7 @@ use crate::http::{enc, HttpEngine, WeiboError, WeiboHttp, HOST_WEIBO};
 use crate::models::*;
 use std::sync::{Arc, Mutex};
 
-#[derive(uniffi::Object)]
+#[cfg_attr(feature = "uniffi-ffi", derive(uniffi::Object))]
 pub struct WeiboClient {
     http: Arc<WeiboHttp>,
     /// 与原 Kotlin 一致：auth 只建一次，共用同一个 cookie 罐
@@ -16,9 +16,9 @@ pub struct WeiboClient {
     uid: Mutex<Option<String>>,
 }
 
-#[uniffi::export]
+#[cfg_attr(feature = "uniffi-ffi", uniffi::export)]
 impl WeiboClient {
-    #[uniffi::constructor]
+    #[cfg_attr(feature = "uniffi-ffi", uniffi::constructor)]
     pub fn new(engine: Arc<dyn HttpEngine>) -> Arc<Self> {
         let http = WeiboHttp::new(engine, None);
         let auth = WeiboAuth::new(http.clone());

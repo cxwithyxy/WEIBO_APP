@@ -11,7 +11,11 @@ flutter_rust_bridge = "=2.13.0"
 
 # 真正的业务核心（微博 API / 登录 / cookie / 解析）。
 # 与 Android 版共用同一份代码 —— 这是「一套 core，两个 UI」的关键。
-weibo-core = { path = "../../rust" }
+#
+# default-features = false：core 的 `uniffi-ffi` feature 默认关闭 ——
+# FRB 路径不需要 uniffi，关掉后产物里不再包含 uniffi 脚手架/元数据。
+# 要生成 Kotlin/Swift 绑定时，单独在 rust/ 下 `--features uniffi-ffi`。
+weibo-core = { path = "../../rust", default-features = false }
 
 # FRB 在 Tokio 运行时上执行同步函数，而 core 用的是 reqwest::blocking。
 # 必须用 spawn_blocking 把阻塞调用挪到阻塞线程池，否则 panic：

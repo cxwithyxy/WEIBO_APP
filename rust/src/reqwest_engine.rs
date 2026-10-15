@@ -20,7 +20,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
 
-#[derive(uniffi::Object)]
+#[cfg_attr(feature = "uniffi-ffi", derive(uniffi::Object))]
 pub struct ReqwestEngine {
     client: reqwest::blocking::Client,
 }
@@ -43,15 +43,15 @@ fn build_tls_config() -> Result<rustls::ClientConfig, WeiboError> {
         .with_no_client_auth())
 }
 
-#[uniffi::export]
+#[cfg_attr(feature = "uniffi-ffi", uniffi::export)]
 impl ReqwestEngine {
-    #[uniffi::constructor]
+    #[cfg_attr(feature = "uniffi-ffi", uniffi::constructor)]
     pub fn new() -> Result<Arc<Self>, WeiboError> {
         Self::with_timeouts(20, 25)
     }
 
     /// 自定义超时（秒）：connect, request
-    #[uniffi::constructor]
+    #[cfg_attr(feature = "uniffi-ffi", uniffi::constructor)]
     pub fn with_timeouts(connect_secs: u64, request_secs: u64) -> Result<Arc<Self>, WeiboError> {
         let tls = build_tls_config()?;
         let client = reqwest::blocking::Client::builder()
