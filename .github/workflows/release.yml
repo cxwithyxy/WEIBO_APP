@@ -143,10 +143,16 @@ jobs:
 
       - name: Build APK
         working-directory: flutter-app
+        env:
+          TARGET: ${{ inputs.target_platforms || 'android-arm64' }}
+          TAG: ${{ steps.ver.outputs.tag }}
         run: |
           set -euo pipefail
-          TARGET="${{ inputs.target_platforms || 'android-arm64' }}"
-          ARGS="--release"
+          # versionName 取 tag（去前导 v）；versionCode 取 run_number。
+          # 原因：pubspec 写死的 `+1` 会让每次发版 versionCode 恒为 1，
+          # 覆盖安装时报 INSTALL_FAILED_VERSION_DOWNGRADE（实测踩到）。
+          NAME="${TAG#v}"
+          ARGS="--release --build-name=$NAME --build-number=${{ github.run_number }}"
           if [ "$TARGET" = "all" ]; then
             ARGS="$ARGS --split-per-abi"
           else
@@ -156,13 +162,24 @@ jobs:
           flutter build apk $ARGS
 
       - name: Collect artifacts
+        env:
+          TARGET: ${{ inputs.target_platforms || 'android-arm64' }}
         run: |
           set -euo pipefail
           TAG="${{ steps.ver.outputs.tag }}"
+          case "$TARGET" in
+            android-arm64) ABIS="arm64-v8a"   ;;
+            android-arm)   ABIS="armeabi-v7a" ;;
+            android-x64)   ABIS="x86_64"      ;;
+            *)             ABIS=""            ;;
+          esac
           mkdir -p dist
           for f in flutter-app/build/app/outputs/flutter-apk/*-release.apk; do
             b=$(basename "$f" -release.apk); b=${b#app-}
-            [ "$b" = "app" ] && b=universal
+            # 未拆分时文件名是 app-release.apk，按请求的目标 ABI 命名。
+            # 不能叫 universal —— Flutter/Rust 只有该 ABI 的真实 .so，其它 ABI
+            # 仅是插件残留的桩 so，装到别的架构上会崩（v1.0.0 实测踩到）。
+            [ "$b" = "app" ] && b="${ABIS:-universal}"
             cp "$f" "dist/weibo-client-${TAG}-${b}.apk"
           done
           # 同时打 zip（转发到飞书时 .apk 会被拒收，.zip 可直发）
