@@ -33,13 +33,11 @@
 ## 架构
 
 ```
-┌────────────────────────────┐   ┌────────────────────────────┐
-│ flutter-app/  Flutter UI   │   │ app/  Android Compose UI   │   ← 两套前端并存
-│ （当前主力，Dart 16 文件）  │   │ （早期版本，Kotlin 26 文件）│
-└─────────────┬──────────────┘   └─────────────┬──────────────┘
-              │ flutter_rust_bridge v2          │ UniFFI 生成的 Kotlin 绑定
-              │ （生成 Dart 绑定）              │
-┌─────────────▼─────────────────────────────────▼──────────────┐
+┌────────────────────────────┐
+│ flutter-app/  Flutter UI   │   ← 当前唯一 UI（Dart 16 文件）
+└─────────────┬──────────────┘
+              │ flutter_rust_bridge v2（生成 Dart 绑定）
+┌─────────────▼────────────────────────────────────────────────┐
 │ rust/  微博核心（Rust 8 文件 ≈2500 行，编译为 libweibo_core.so）│
 │   http.rs            cookie 罐 + 自跟随重定向 + CSRF + UA      │
 │   auth.rs            扫码登录（SSO v2）                        │
@@ -53,16 +51,21 @@
        └──────────────┘
 ```
 
-**同一个核心，三个前端**：Flutter、Compose、CLI 共用完全相同的
+**同一个核心，两个前端**：Flutter 与 CLI 共用完全相同的
 HTTP / cookie / CSRF / 解析逻辑 —— 这也是为什么从 Compose 迁到 Flutter 时，
 **`rust/` 一行都不用改**。
 
-**两条绑定线并存**（互不冲突，各自 cdylib）：
-- `app/` → UniFFI → Kotlin
-- `flutter-app/` → flutter_rust_bridge v2 → Dart
+**绑定线**：`flutter-app/` → flutter_rust_bridge v2 → Dart。
+（core 仍保留 UniFFI 导出，日后需要 Kotlin/Swift 绑定时可直接生成。）
 
-> 历史：核心原先用 Kotlin 实现（`core/` 模块），已整体迁移到 Rust 并逐项验证。
-> 旧代码在 git 历史中可随时取回：`git show <旧提交>:core/src/main/kotlin/com/cx/weibo/WeiboCore.kt`
+> 历史：核心原先用 Kotlin 实现（`core/` 模块），后整体迁移到 Rust 并逐项验证；
+> 早期的 Jetpack Compose UI（`app/` 模块）也已移除，UI 统一到 Flutter。
+> 这些旧代码都在 git 历史里，可随时取回：
+>
+> ```bash
+> git show <旧提交>:core/src/main/kotlin/com/cx/weibo/WeiboCore.kt
+> git checkout 5ab483a -- app/     # 取回 Compose UI（5ab483a = 删除前的提交）
+> ```
 
 ---
 
@@ -168,21 +171,9 @@ flutter build apk --release                   # 全架构包
 
 Gradle 会通过 cargokit 自动完成：`cargo build`（交叉编译 3 个 ABI）→ 打进 APK。
 
-### Android（Compose 版，早期 UI，仍在仓库里）
-
-```bash
-# 需要：JDK 17+、Android SDK、Android NDK、rustup
-export ANDROID_NDK_HOME=$HOME/Android/Sdk/ndk/<版本>
-./gradlew :app:assembleDebug
-```
-
-Gradle 会自动完成：`cargo build`（host，供生成绑定）→ UniFFI 生成 Kotlin 绑定
-→ `cargo ndk` 交叉编译 3 个 ABI → 打进 APK。
-加 `-PskipRust` 可跳过 Rust 构建（复用已有产物，改 UI 时更快）。
-
-> **包名约定**：两套 UI 都用 `com.cx.weibo.android` + 同一个 debug keystore，
-> 所以可以直接**覆盖安装**；cookie 路径也都是 `filesDir/cookies.tsv`，
-> 覆盖安装后**登录态可直接继承**，不用重新扫码。
+> **包名/签名**：UI 用 `com.cx.weibo.android` + debug keystore
+> （复用 debug 密钥签 release，方便直接安装体验）。
+> cookie 存在 `filesDir/cookies.tsv`，同包名**覆盖安装后登录态可直接继承**，不用重新扫码。
 
 ---
 
@@ -344,7 +335,6 @@ Android UA 留作常量（`ANDROID_UA`）便于切换。
 |---|---|
 | Rust 核心 + CLI | rustup（本仓库验证于 rustc 1.99.0） |
 | Android 交叉编译 | Android NDK 30.0.16248370 + `cargo-ndk` |
-| Android 构建（Compose 版） | JDK 17+、Android SDK、Gradle wrapper 8.12.1 |
 | Flutter 构建 | Flutter SDK（本仓库验证于 3.47.7 / Dart 3.13.5） |
 | Flutter↔Rust 绑定 | `flutter_rust_bridge_codegen` 2.13.0 |
 
