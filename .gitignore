@@ -22,8 +22,6 @@ cookies.txt
 # Rust 核心（rust/）
 # ---------------------------------------------------------------------------
 rust/target/
-# 自动生成的 Kotlin 绑定（由 Gradle 任务 genUniffiBindings 产出）
-rust/build/
-
-# cargo-ndk 交叉编译产物（由 Gradle 任务 buildRustAndroid 产出）
-app/src/main/jniLibs/
+# 注：早先 Gradle 生成 Kotlin 绑定的 `rust/build/` 与 cargo-ndk 产物
+# `app/src/main/jniLibs/` 已随 app/ 模块一并移除。
+# Flutter 侧的 android/ 自带 .gitignore，这里不用重复。
