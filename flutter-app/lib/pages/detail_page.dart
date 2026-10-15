@@ -7,11 +7,14 @@ import '../widgets/actions.dart';
 import '../widgets/common.dart';
 import '../widgets/status_card.dart';
 
-/// 微博详情页：正文 + 评论 + 转发。
+/// 微博详情页：**3 个 tab —— 正文 / 评论 / 转发**。
 ///
-/// 「双击顶部回顶部」对齐原 Compose 版（`StatusDetailScreen` 里也给列表挂了
-/// `detectTapGestures(onDoubleTap = { animateScrollToItem(0) })`）——
-/// 所以这里显式持 `TabController`，好知道当前在哪个 tab，再滚对应的列表。
+/// 结构上刻意保持简单（用户反馈后重构）：
+///  - 三个 tab 各自是一个独立可滚动列表，**不做「头部 + 内嵌列表」的嵌套滚动**。
+///    早先用 NestedScrollView 把正文当 header、评论/转发当内层列表，
+///    内外两层滚动 + 内层 RefreshIndicator 互相打架 →
+///    「往下滑之后上不去、反而触发刷新」。
+///  - 详情页**不做下拉刷新**（用户要求）：正文不会变，评论/转发靠「滑到底自动加载更多」。
 class DetailPage extends StatefulWidget {
   const DetailPage({super.key, required this.mid});
 
@@ -25,7 +28,9 @@ class _DetailPageState extends State<DetailPage> with SingleTickerProviderStateM
   StatusDto? _status;
   Object? _error;
 
-  late final TabController _tabs = TabController(length: 2, vsync: this);
+  late final TabController _tabs = TabController(length: 3, vsync: this);
+
+  final _bodyScroll = ScrollController();
   final _commentScroll = ScrollController();
   final _repostScroll = ScrollController();
 
@@ -38,13 +43,19 @@ class _DetailPageState extends State<DetailPage> with SingleTickerProviderStateM
   @override
   void dispose() {
     _tabs.dispose();
+    _bodyScroll.dispose();
     _commentScroll.dispose();
     _repostScroll.dispose();
     super.dispose();
   }
 
+  /// 双击/单击标题 → 当前 tab 回顶部
   void _scrollCurrentToTop() {
-    final c = _tabs.index == 0 ? _commentScroll : _repostScroll;
+    final c = switch (_tabs.index) {
+      0 => _bodyScroll,
+      1 => _commentScroll,
+      _ => _repostScroll,
+    };
     if (!c.hasClients) return;
     c.animateTo(0, duration: const Duration(milliseconds: 300), curve: Curves.easeOut);
   }
@@ -63,7 +74,7 @@ class _DetailPageState extends State<DetailPage> with SingleTickerProviderStateM
       }
     }
 
-    // 2) 再回网络刷新，并把**响应原文**存进缓存（下次秒开）
+    // 2) 再回网络刷新，并把**响应原文**存进缓存
     try {
       final r = await api.statusDetailRaw(mid: widget.mid);
       if (r.status != null && mounted) setState(() => _status = r.status);
@@ -96,67 +107,49 @@ class _DetailPageState extends State<DetailPage> with SingleTickerProviderStateM
           tooltip: '返回',
           onPressed: () => Navigator.of(context).maybePop(),
         ),
+        bottom: TabBar(
+          controller: _tabs,
+          tabs: const [Tab(text: '正文'), Tab(text: '评论'), Tab(text: '转发')],
+        ),
       ),
       body: _error != null
           ? ErrorView(error: _error!, onRetry: _load)
           : s == null
               ? const Center(child: CircularProgressIndicator())
-              // ⚠ 必须用 NestedScrollView：正文可能非常长。
-              // 早先把 StatusCard 直接放进 Column + Expanded(TabBarView)，
-              // 正文一长就把下半部分挤成 0 高度 → 整页滑不动（用户实测报的）。
-              // 现在正文是「可滚动的 header」，评论/转发的 TabBar 钉在顶部。
-              : NestedScrollView(
-                  headerSliverBuilder: (context, _) => [
-                    SliverToBoxAdapter(
-                      child: StatusCard(status: s, showActions: false),
+              : TabBarView(
+                  controller: _tabs,
+                  children: [
+                    _BodyTab(status: s, controller: _bodyScroll),
+                    _CommentsTab(
+                      mid: widget.mid,
+                      initialTotal: s.comments,
+                      controller: _commentScroll,
                     ),
-                    SliverPersistentHeader(
-                      pinned: true,
-                      delegate: _PinnedTabBar(
-                        TabBar(
-                          controller: _tabs,
-                          tabs: const [Tab(text: '评论'), Tab(text: '转发')],
-                        ),
-                        Theme.of(context).colorScheme.surface,
-                      ),
-                    ),
+                    _RepostsTab(mid: widget.mid, controller: _repostScroll),
                   ],
-                  body: TabBarView(
-                    controller: _tabs,
-                    children: [
-                      _CommentsTab(
-                        mid: widget.mid,
-                        initialTotal: s.comments,
-                        controller: _commentScroll,
-                      ),
-                      _RepostsTab(mid: widget.mid, controller: _repostScroll),
-                    ],
-                  ),
                 ),
     );
   }
 }
 
-/// 钉在顶部的 TabBar（NestedScrollView 的 pinned header）
-class _PinnedTabBar extends SliverPersistentHeaderDelegate {
-  _PinnedTabBar(this.tabBar, this.background);
+// ------------------------------------------------------------------ 正文
 
-  final TabBar tabBar;
-  final Color background;
+/// 正文 tab。长文也能正常滚动：整页就是一个 ListView，没有嵌套滚动。
+class _BodyTab extends StatelessWidget {
+  const _BodyTab({required this.status, this.controller});
 
-  @override
-  double get minExtent => tabBar.preferredSize.height;
-
-  @override
-  double get maxExtent => tabBar.preferredSize.height;
+  final StatusDto status;
+  final ScrollController? controller;
 
   @override
-  Widget build(BuildContext context, double shrinkOffset, bool overlapsContent) =>
-      ColoredBox(color: background, child: tabBar);
-
-  @override
-  bool shouldRebuild(_PinnedTabBar oldDelegate) =>
-      oldDelegate.tabBar != tabBar || oldDelegate.background != background;
+  Widget build(BuildContext context) {
+    return ListView(
+      controller: controller,
+      physics: const AlwaysScrollableScrollPhysics(),
+      padding: const EdgeInsets.only(bottom: 32),
+      children: [StatusCard(status: status)],
+    );
+  }
 }
 
 // ------------------------------------------------------------------ 评论
@@ -255,47 +248,35 @@ class _CommentsTabState extends State<_CommentsTab> with AutomaticKeepAliveClien
     if (_error != null && _items.isEmpty) return ErrorView(error: _error!, onRetry: _load);
     if (_items.isEmpty && _loading) return const Center(child: CircularProgressIndicator());
     if (_items.isEmpty) {
-      return RefreshIndicator(
-        onRefresh: _load,
-        child: ListView(
-          children: const [
-            SizedBox(height: 120),
-            EmptyView(text: '还没有评论', icon: Icons.chat_bubble_outline),
-          ],
-        ),
-      );
+      return const EmptyView(text: '还没有评论', icon: Icons.chat_bubble_outline);
     }
-    return RefreshIndicator(
-      onRefresh: _load,
-      child: ListView.separated(
-        controller: _scroll,
-        // NestedScrollView 里必须显式给 physics，否则内容不满一屏时无法配合外层滚动
-        physics: const AlwaysScrollableScrollPhysics(),
-        itemCount: _items.length + 1,
-        separatorBuilder: (_, _) => const Divider(height: 1),
-        itemBuilder: (context, i) {
-          if (i == 0) {
-            return Padding(
-              padding: const EdgeInsets.fromLTRB(12, 10, 12, 6),
-              child: Text(
-                '评论 ${_total ?? widget.initialTotal}',
-                style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
-              ),
-            );
-          }
-          if (i == _items.length) return FooterHint(loading: _loading, hasMore: _hasMore);
-          final c = _items[i - 1];
-          return _CommentTile(
-            comment: c,
-            onReply: () => showCommentSheet(
-              context,
-              id: widget.mid,
-              subtitle: '回复 @${c.user?.name ?? ''}：${c.text}',
-              replyToCid: c.id,
+    return ListView.separated(
+      controller: _scroll,
+      physics: const AlwaysScrollableScrollPhysics(),
+      itemCount: _items.length + 1,
+      separatorBuilder: (_, _) => const Divider(height: 1),
+      itemBuilder: (context, i) {
+        if (i == 0) {
+          return Padding(
+            padding: const EdgeInsets.fromLTRB(12, 10, 12, 6),
+            child: Text(
+              '评论 ${_total ?? widget.initialTotal}',
+              style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
             ),
           );
-        },
-      ),
+        }
+        if (i == _items.length) return FooterHint(loading: _loading, hasMore: _hasMore);
+        final c = _items[i - 1];
+        return _CommentTile(
+          comment: c,
+          onReply: () => showCommentSheet(
+            context,
+            id: widget.mid,
+            subtitle: '回复 @${c.user?.name ?? ''}：${c.text}',
+            replyToCid: c.id,
+          ),
+        );
+      },
     );
   }
 }
@@ -478,28 +459,17 @@ class _RepostsTabState extends State<_RepostsTab> with AutomaticKeepAliveClientM
     if (_error != null && _items.isEmpty) return ErrorView(error: _error!, onRetry: _load);
     if (_items.isEmpty && _loading) return const Center(child: CircularProgressIndicator());
     if (_items.isEmpty) {
-      return RefreshIndicator(
-        onRefresh: _load,
-        child: ListView(
-          children: const [
-            SizedBox(height: 120),
-            EmptyView(text: '还没有转发', icon: Icons.repeat),
-          ],
-        ),
-      );
+      return const EmptyView(text: '还没有转发', icon: Icons.repeat);
     }
-    return RefreshIndicator(
-      onRefresh: _load,
-      child: ListView.separated(
-        controller: _scroll,
-        physics: const AlwaysScrollableScrollPhysics(),
-        itemCount: _items.length + 1,
-        separatorBuilder: (_, _) => const Divider(height: 1),
-        itemBuilder: (context, i) {
-          if (i == _items.length) return FooterHint(loading: _loading, hasMore: _hasMore);
-          return StatusCard(status: _items[i], showActions: false);
-        },
-      ),
+    return ListView.separated(
+      controller: _scroll,
+      physics: const AlwaysScrollableScrollPhysics(),
+      itemCount: _items.length + 1,
+      separatorBuilder: (_, _) => const Divider(height: 1),
+      itemBuilder: (context, i) {
+        if (i == _items.length) return FooterHint(loading: _loading, hasMore: _hasMore);
+        return StatusCard(status: _items[i], showActions: false);
+      },
     );
   }
 }
