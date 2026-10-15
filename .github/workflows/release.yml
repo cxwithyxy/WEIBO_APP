@@ -69,13 +69,35 @@ jobs:
           distribution: temurin
           java-version: '21'
 
-      - name: Set up Android SDK
-        uses: android-actions/setup-android@v3
-
-      - name: Install NDK ${{ env.ANDROID_NDK_VERSION }}
+      # 不用 android-actions/setup-android：ubuntu-24.04 runner 镜像自带完整
+      # Android SDK，多一层第三方 action 反而多一个失败点（首次实测就挂在这）。
+      - name: Set up Android SDK + NDK
         run: |
-          yes | sdkmanager --licenses > /dev/null 2>&1 || true
-          sdkmanager --install "ndk;${ANDROID_NDK_VERSION}"
+          set -euo pipefail
+          SDK="${ANDROID_SDK_ROOT:-${ANDROID_HOME:-/usr/local/lib/android/sdk}}"
+          echo "--- 诊断 ---"
+          echo "SDK=$SDK"
+          ls "$SDK" || true
+          SM="$SDK/cmdline-tools/latest/bin/sdkmanager"
+          [ -x "$SM" ] || SM="$(command -v sdkmanager || true)"
+          if [ ! -x "$SM" ]; then
+            echo "::error::找不到 sdkmanager（SDK=$SDK）"
+            ls -la "$SDK" || true
+            exit 1
+          fi
+          echo "sdkmanager=$SM"
+          yes | "$SM" --licenses > /dev/null 2>&1 || true
+          "$SM" --install \
+            "ndk;${ANDROID_NDK_VERSION}" \
+            "platforms;android-36" \
+            "build-tools;36.0.0" \
+            platform-tools
+          {
+            echo "ANDROID_SDK_ROOT=$SDK"
+            echo "ANDROID_HOME=$SDK"
+            echo "ANDROID_NDK_HOME=$SDK/ndk/${ANDROID_NDK_VERSION}"
+          } >> "$GITHUB_ENV"
+          echo "NDK 就位: $(ls -d "$SDK"/ndk/* 2>/dev/null || echo 无)"
 
       - name: Set up Flutter
         uses: subosito/flutter-action@v2
