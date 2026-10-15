@@ -153,6 +153,8 @@ jobs:
           # 覆盖安装时报 INSTALL_FAILED_VERSION_DOWNGRADE（实测踩到）。
           NAME="${TAG#v}"
           ARGS="--release --build-name=$NAME --build-number=${{ github.run_number }}"
+          # 与本地瘦身包保持一致：混淆 + 另存符号（否则 APK 多出 DWARF，体积大 ~0.5MB）
+          ARGS="$ARGS --obfuscate --split-debug-info=build/symbols"
           if [ "$TARGET" = "all" ]; then
             ARGS="$ARGS --split-per-abi"
           else
@@ -193,6 +195,38 @@ jobs:
           path: dist/*
           if-no-files-found: error
           retention-days: 30
+
+      # 签名门禁：本项目用**公开固定**的 key 签名（见 android/keys/README.md），
+      # 好处是任何人的构建都能覆盖安装。这个指纹一旦漂移，覆盖安装就会全断，
+      # 所以每次发版都硬校验一次。
+      - name: Verify signature against fixed key
+        run: |
+          set -euo pipefail
+          BT=$(ls -d "$ANDROID_SDK_ROOT"/build-tools/* | sort -V | tail -1)
+          EXPECTED="f698b713674e5d9070fffa8ffdda38212f24f2a5bc40d88d17fc3ea4dd46bea4"
+          fail=0
+          for a in dist/*.apk; do
+            echo "--- $a ---"
+            # apksigner verify 本身签名无效就非 0 退出（set -e 会直接失败）
+            "$BT/apksigner" verify --print-certs "$a" | sed 's/^/    /'
+            got=$("$BT/apksigner" verify --print-certs "$a" \
+                  | grep -i 'Signer #1 certificate SHA-256 digest' \
+                  | awk '{print $NF}' | tr -d ':' | tr 'A-Z' 'a-z')
+            if [ "$got" != "$EXPECTED" ]; then
+              echo "::error::$a 签名指纹不对：$got != $EXPECTED（会破坏覆盖安装）"
+              fail=1
+            fi
+          done
+          [ "$fail" = 0 ] && echo "✓ 全部 APK 均由固定 key 签名"
+          exit $fail
+
+      - name: Upload Dart symbols
+        uses: actions/upload-artifact@v4
+        with:
+          name: dart-symbols-${{ steps.ver.outputs.tag }}
+          path: flutter-app/build/symbols/**
+          if-no-files-found: warn
+          retention-days: 90
 
       - name: Create GitHub Release
         if: startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch'

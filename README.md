@@ -345,3 +345,31 @@ cargo install flutter_rust_bridge_codegen --version 2.13.0 --locked
 ```
 
 > 构建 Rust / Gradle / Flutter 依赖时若网络受限，请自行配置代理。
+
+---
+
+## 自己编译（签名一致，可与官方 Release 互相覆盖安装）
+
+本项目**故意公开**了构建签名 key（`flutter-app/android/keys/weibo-release.jks`），
+所以你本地编出来的 APK 与 GitHub Release 里的**签名一致** —— 可以互相覆盖安装，
+不用先卸载、不会丢数据。理由与代价见 [`flutter-app/android/keys/README.md`](flutter-app/android/keys/README.md)。
+
+```bash
+cd flutter-app
+flutter pub get
+flutter build apk --release --target-platform android-arm64
+# 产物：build/app/outputs/flutter-apk/app-release.apk
+```
+
+⚠️ 编正式包前先 `flutter clean` —— 否则 `build/` 里上次编的**别的 ABI 的陈旧 `.so`
+会被一并打进去**，体积虚高（实测 11.0MB → 13.8MB），而且并不会让它变成真 universal。
+
+校验签名（确认能与官方包互相覆盖）：
+
+```bash
+apksigner verify --print-certs app-release.apk
+# 期望 SHA-256：f698b713674e5d9070fffa8ffdda38212f24f2a5bc40d88d17fc3ea4dd46bea4
+```
+
+> ⚠️ 这把 key 是**公开身份**，不要用于上架商店或任何需要真实身份的场景。
+> 想签自己的名：删掉 `flutter-app/android/key.properties` 即可退回 debug 签名。

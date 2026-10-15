@@ -1,8 +1,23 @@
+import java.util.Properties
+
 plugins {
     id("com.android.application")
     // The Flutter Gradle Plugin must be applied after the Android and Kotlin Gradle plugins.
     id("dev.flutter.flutter-gradle-plugin")
 }
+
+// ── 固定签名（2026-10-15）────────────────────────────────────────────────
+// key.properties 与 keys/weibo-release.jks 都是**故意公开**的。
+// 目的：任何人 clone 后编出来的 APK 与原版签名一致 → 可以互相覆盖安装，
+// 包括 GitHub Actions 自动发的版本。详见 android/keys/README.md
+val keystorePropertiesFile = rootProject.file("key.properties")
+val keystoreProperties = Properties().apply {
+    if (keystorePropertiesFile.exists()) {
+        keystorePropertiesFile.inputStream().use { load(it) }
+    }
+}
+val hasReleaseKey =
+    keystorePropertiesFile.exists() && keystoreProperties.getProperty("storeFile") != null
 
 android {
     namespace = "com.cx.weibo.android"
@@ -29,11 +44,26 @@ android {
         versionName = flutter.versionName
     }
 
+    signingConfigs {
+        if (hasReleaseKey) {
+            create("release") {
+                storeFile = rootProject.file(keystoreProperties.getProperty("storeFile"))
+                storePassword = keystoreProperties.getProperty("storePassword")
+                keyAlias = keystoreProperties.getProperty("keyAlias")
+                keyPassword = keystoreProperties.getProperty("keyPassword")
+            }
+        }
+    }
+
     buildTypes {
         release {
-            // TODO: Add your own signing config for the release build.
-            // Signing with the debug keys for now, so `flutter run --release` works.
-            signingConfig = signingConfigs.getByName("debug")
+            // 有 key.properties 就用固定 key（公开，可互相覆盖安装）；
+            // 没有就退回 debug key，保证 `flutter run --release` 仍能用。
+            signingConfig = if (hasReleaseKey) {
+                signingConfigs.getByName("release")
+            } else {
+                signingConfigs.getByName("debug")
+            }
         }
     }
 
