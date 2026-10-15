@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../src/rust/api/dto.dart';
 import '../src/rust/api/weibo.dart' as api;
+import '../util/dedup.dart';
 import '../widgets/common.dart';
 import '../widgets/status_card.dart';
 import 'detail_page.dart';
@@ -25,6 +26,9 @@ class SearchPage extends StatefulWidget {
 class _SearchPageState extends State<SearchPage> {
   late final TextEditingController _ctrl = TextEditingController(text: widget.initialQuery ?? '');
   final _items = <StatusDto>[];
+
+  /// 已出现过的微博 id —— 跨页去重（见 util/dedup.dart）
+  final _seen = <String>{};
   late final ScrollController _scroll = widget.controller ?? ScrollController();
   bool get _ownsScroll => widget.controller == null;
   int _page = 1;
@@ -65,10 +69,14 @@ class _SearchPageState extends State<SearchPage> {
     try {
       final list = await api.search(q: q, count: 20, page: 1);
       if (!mounted) return;
+      final fresh = dedupById(list, (s) => s.id);
       setState(() {
         _items
           ..clear()
-          ..addAll(list);
+          ..addAll(fresh);
+        _seen
+          ..clear()
+          ..addAll(fresh.map((s) => s.id));
         _page = 2;
         _hasMore = list.length >= 20;
       });
@@ -87,8 +95,10 @@ class _SearchPageState extends State<SearchPage> {
     try {
       final list = await api.search(q: q, count: 20, page: _page);
       if (!mounted) return;
+      // 页码翻页在动态搜索流上必然有跨页重叠 → 追加前按 id 去重
+      final fresh = dedupById(list, (s) => s.id, seen: _seen);
       setState(() {
-        _items.addAll(list);
+        _items.addAll(fresh);
         _page += 1;
         _hasMore = list.isNotEmpty;
       });

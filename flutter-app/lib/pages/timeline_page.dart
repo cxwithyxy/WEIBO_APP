@@ -4,6 +4,7 @@ import '../data/cache.dart';
 import '../session.dart';
 import '../src/rust/api/dto.dart';
 import '../src/rust/api/weibo.dart' as api;
+import '../util/dedup.dart';
 import '../widgets/common.dart';
 import '../widgets/status_card.dart';
 import 'detail_page.dart';
@@ -39,6 +40,9 @@ class TimelinePage extends StatefulWidget {
 
 class _TimelinePageState extends State<TimelinePage> with AutomaticKeepAliveClientMixin {
   final _items = <StatusDto>[];
+
+  /// 已出现过的微博 id —— 跨页去重用（见 util/dedup.dart）
+  final _seen = <String>{};
   late final ScrollController _scroll = widget.controller ?? ScrollController();
   bool get _ownsScroll => widget.controller == null;
 
@@ -85,10 +89,15 @@ class _TimelinePageState extends State<TimelinePage> with AutomaticKeepAliveClie
   Future<void> _loadFromCache() async {
     final snap = await FeedCache.load(_feedKey);
     if (snap == null) return;
+    // 缓存存的是每页原文；页与页之间本来就重叠（服务端给的就这样），
+    // 所以还原时同样要走 id 去重，否则秒开那一下就是「重复满屏」。
+    final seen = <String>{};
     final all = <StatusDto>[];
     for (final raw in snap.pages) {
       try {
-        all.addAll(await api.parseTimelineRaw(raw: raw));
+        all.addAll(
+          dedupById(await api.parseTimelineRaw(raw: raw), (s) => s.id, seen: seen),
+        );
       } catch (_) {
         // 单页解析失败就跳过这一页，不拖垮整块缓存
       }
@@ -98,6 +107,9 @@ class _TimelinePageState extends State<TimelinePage> with AutomaticKeepAliveClie
       _items
         ..clear()
         ..addAll(all);
+      _seen
+        ..clear()
+        ..addAll(seen);
       _pages
         ..clear()
         ..addAll(snap.pages);
@@ -118,6 +130,13 @@ class _TimelinePageState extends State<TimelinePage> with AutomaticKeepAliveClie
     return api.followingTimelinePageRaw(page: first ? 1 : _page, count: 20);
   }
 
+  /// 首页流的游标还能继续翻吗？
+  ///
+  /// ⚠️ 游标为空时**必须停**：`since_id` 传空串会被 core 归一化成 `"0"`，
+  /// 那等于「再给我第一页」→ 无限重复同一批内容。关注流用页码翻页，不适用。
+  bool _cursorAdvanced(String next, String prev) =>
+      widget.kind != TimelineKind.home || (next.isNotEmpty && next != prev);
+
   Future<void> refresh() async {
     if (_loading) return;
     setState(() {
@@ -127,15 +146,21 @@ class _TimelinePageState extends State<TimelinePage> with AutomaticKeepAliveClie
     try {
       final p = await _fetchRaw(first: true);
       if (!mounted) return;
+      // 同一页内部也可能重复（置顶 + 原条目），先按 id 去重
+      final fresh = dedupById(p.statuses, (s) => s.id);
+      final cursor = p.nextCursor ?? '';
       setState(() {
         _items
           ..clear()
-          ..addAll(p.statuses);
+          ..addAll(fresh);
+        _seen
+          ..clear()
+          ..addAll(fresh.map((s) => s.id));
         _pages.clear();
         if (p.raw.isNotEmpty) _pages.add(p.raw);
-        _cursor = p.nextCursor ?? '';
+        _cursor = cursor;
         _page = 2;
-        _hasMore = p.statuses.length >= 20;
+        _hasMore = p.statuses.length >= 20 && _cursorAdvanced(cursor, '');
       });
       await _persist();
     } catch (e) {
@@ -150,15 +175,20 @@ class _TimelinePageState extends State<TimelinePage> with AutomaticKeepAliveClie
   Future<void> _more() async {
     if (_loading || !_hasMore || _error != null) return;
     setState(() => _loading = true);
+    final prevCursor = _cursor;
     try {
       final p = await _fetchRaw(first: false);
       if (!mounted) return;
+      // ★ 防重复的关键：与**已有条目**按 id 去重后再追加（见 util/dedup.dart）
+      final fresh = dedupById(p.statuses, (s) => s.id, seen: _seen);
+      final next = p.nextCursor ?? '';
       setState(() {
-        _items.addAll(p.statuses);
+        _items.addAll(fresh);
         if (p.raw.isNotEmpty) _pages.add(p.raw);
-        _cursor = p.nextCursor ?? _cursor;
+        if (next.isNotEmpty) _cursor = next;
         _page += 1;
-        _hasMore = p.statuses.isNotEmpty;
+        // 游标没前进（或拿不到游标）= 服务端在重复给同一批 → 停，别再拉
+        _hasMore = p.statuses.isNotEmpty && _cursorAdvanced(next, prevCursor);
       });
       await _persist();
     } catch (_) {

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../src/rust/api/dto.dart';
 import '../src/rust/api/weibo.dart' as api;
+import '../util/dedup.dart';
 import '../widgets/common.dart';
 import '../widgets/status_card.dart';
 import 'detail_page.dart';
@@ -21,6 +22,9 @@ class _UserPageState extends State<UserPage> {
   Object? _profileError;
 
   final _items = <StatusDto>[];
+
+  /// 已出现过的微博 id —— 跨页去重（见 util/dedup.dart）
+  final _seen = <String>{};
   final _scroll = ScrollController();
   int _page = 1;
   bool _loading = false;
@@ -72,10 +76,14 @@ class _UserPageState extends State<UserPage> {
     try {
       final p = await api.userTimelinePage(uid: widget.uid, page: 1);
       if (!mounted) return;
+      final fresh = dedupById(p.statuses, (s) => s.id);
       setState(() {
         _items
           ..clear()
-          ..addAll(p.statuses);
+          ..addAll(fresh);
+        _seen
+          ..clear()
+          ..addAll(fresh.map((s) => s.id));
         _page = 2;
         _hasMore = p.statuses.length >= 20;
       });
@@ -92,8 +100,10 @@ class _UserPageState extends State<UserPage> {
     try {
       final p = await api.userTimelinePage(uid: widget.uid, page: _page);
       if (!mounted) return;
+      // 页码翻页在动态流上必然有跨页重叠 → 追加前按 id 去重
+      final fresh = dedupById(p.statuses, (s) => s.id, seen: _seen);
       setState(() {
-        _items.addAll(p.statuses);
+        _items.addAll(fresh);
         _page += 1;
         _hasMore = p.statuses.isNotEmpty;
       });

@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../data/cache.dart';
 import '../src/rust/api/dto.dart';
 import '../src/rust/api/weibo.dart' as api;
+import '../util/dedup.dart';
 import '../widgets/actions.dart';
 import '../widgets/common.dart';
 import '../widgets/status_card.dart';
@@ -174,6 +175,9 @@ class _CommentsTab extends StatefulWidget {
 
 class _CommentsTabState extends State<_CommentsTab> with AutomaticKeepAliveClientMixin {
   final _items = <CommentDto>[];
+
+  /// 已出现过的评论 id —— 跨页去重（见 util/dedup.dart）
+  final _seen = <String>{};
   late final ScrollController _scroll = widget.controller ?? ScrollController();
   bool get _ownsScroll => widget.controller == null;
   int _maxId = 0;
@@ -212,10 +216,14 @@ class _CommentsTabState extends State<_CommentsTab> with AutomaticKeepAliveClien
       // flow=1（按时间）才能翻页；flow=0 按热度翻不了页
       final p = await api.commentsPage(mid: widget.mid, count: 20, maxId: 0, flow: 1);
       if (!mounted) return;
+      final fresh = dedupById(p.comments, (c) => c.id);
       setState(() {
         _items
           ..clear()
-          ..addAll(p.comments);
+          ..addAll(fresh);
+        _seen
+          ..clear()
+          ..addAll(fresh.map((c) => c.id));
         _maxId = p64Int(p.nextMaxId);
         _total = p.total;
         _hasMore = p.comments.length >= 20;
@@ -233,8 +241,9 @@ class _CommentsTabState extends State<_CommentsTab> with AutomaticKeepAliveClien
     try {
       final p = await api.commentsPage(mid: widget.mid, count: 20, maxId: _maxId, flow: 1);
       if (!mounted) return;
+      final fresh = dedupById(p.comments, (c) => c.id, seen: _seen);
       setState(() {
-        _items.addAll(p.comments);
+        _items.addAll(fresh);
         _maxId = p64Int(p.nextMaxId);
         _hasMore = p.comments.isNotEmpty;
       });
@@ -388,6 +397,9 @@ class _RepostsTab extends StatefulWidget {
 
 class _RepostsTabState extends State<_RepostsTab> with AutomaticKeepAliveClientMixin {
   final _items = <StatusDto>[];
+
+  /// 已出现过的微博 id —— 跨页去重（见 util/dedup.dart）
+  final _seen = <String>{};
   late final ScrollController _scroll = widget.controller ?? ScrollController();
   bool get _ownsScroll => widget.controller == null;
   int _page = 1;
@@ -424,10 +436,14 @@ class _RepostsTabState extends State<_RepostsTab> with AutomaticKeepAliveClientM
     try {
       final list = await api.reposts(mid: widget.mid, page: 1);
       if (!mounted) return;
+      final fresh = dedupById(list, (s) => s.id);
       setState(() {
         _items
           ..clear()
-          ..addAll(list);
+          ..addAll(fresh);
+        _seen
+          ..clear()
+          ..addAll(fresh.map((s) => s.id));
         _page = 2;
         _hasMore = list.length >= 20;
       });
@@ -444,8 +460,10 @@ class _RepostsTabState extends State<_RepostsTab> with AutomaticKeepAliveClientM
     try {
       final list = await api.reposts(mid: widget.mid, page: _page);
       if (!mounted) return;
+      // 页码翻页在动态转发流上必然有跨页重叠 → 追加前按 id 去重
+      final fresh = dedupById(list, (s) => s.id, seen: _seen);
       setState(() {
-        _items.addAll(list);
+        _items.addAll(fresh);
         _page += 1;
         _hasMore = list.isNotEmpty;
       });
