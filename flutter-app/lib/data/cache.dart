@@ -134,3 +134,38 @@ class StatusCache {
     } catch (_) {}
   }
 }
+
+/// 「你上次刷到这里」锚点：每个信息流记**一条微博 id**（`marker/<feed>.txt`）。
+///
+/// 为什么记 id 而不是「列表第几条」：index 会被刷新、去重、广告过滤弄漂；
+/// id 不会。而且微博 id **单调递增** —— 越新的 id 越大，所以
+/// 「谁在更靠下的位置」可以**纯靠数字比较**得出（见 `isOlderId`）。
+class ReadMarker {
+  static Future<File> _file(String feed) async =>
+      File('${(await _sub('marker')).path}/$feed.txt');
+
+  static Future<String?> load(String feed) async {
+    try {
+      final f = await _file(feed);
+      if (!await f.exists()) return null;
+      final s = (await f.readAsString()).trim();
+      return s.isEmpty ? null : s;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  static Future<void> save(String feed, String id) async {
+    if (id.isEmpty) return;
+    try {
+      await _atomicWrite(await _file(feed), id);
+    } catch (_) {}
+  }
+
+  static Future<void> clear(String feed) async {
+    try {
+      final f = await _file(feed);
+      if (await f.exists()) await f.delete();
+    } catch (_) {}
+  }
+}
