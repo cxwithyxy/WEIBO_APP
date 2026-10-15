@@ -148,11 +148,16 @@ jobs:
           TAG: ${{ steps.ver.outputs.tag }}
         run: |
           set -euo pipefail
-          # versionName 取 tag（去前导 v）；versionCode 取 run_number。
-          # 原因：pubspec 写死的 `+1` 会让每次发版 versionCode 恒为 1，
-          # 覆盖安装时报 INSTALL_FAILED_VERSION_DOWNGRADE（实测踩到）。
+          # versionName 取 tag（去前导 v）；versionCode 由版本号推导：
+          #   v1.0.4 → 10004（major*10000 + minor*100 + patch）
+          # 为什么不用 run_number：它从 1 开始、值极小。实测已装包的
+          # versionCode 可能高达 4001（split-per-abi 会给 ABI 加 1000 偏移），
+          # 用 run_number 会直接触发 INSTALL_FAILED_VERSION_DOWNGRADE。
+          # 用版本号推导则单调递增，且量级足够大。
           NAME="${TAG#v}"
-          ARGS="--release --build-name=$NAME --build-number=${{ github.run_number }}"
+          VC=$(echo "$NAME" | awk -F. '{printf "%d%02d%02d", $1, $2, $3+0}')
+          echo "versionName=$NAME  versionCode=$VC"
+          ARGS="--release --build-name=$NAME --build-number=$VC"
           # 与本地瘦身包保持一致：混淆 + 另存符号（否则 APK 多出 DWARF，体积大 ~0.5MB）
           ARGS="$ARGS --obfuscate --split-debug-info=build/symbols"
           if [ "$TARGET" = "all" ]; then
@@ -208,7 +213,7 @@ jobs:
           set -uo pipefail
           BT=$(ls -d "$ANDROID_SDK_ROOT"/build-tools/* 2>/dev/null | sort -V | tail -1)
           echo "apksigner: $BT/apksigner"
-          EXPECTED="f698b713674e5d9070fffa8ffdda38212f24f2a5bc40d88d17fc3ea4dd46bea4"
+          EXPECTED="c5e27bffb47bce52d2632b467361f99ccac9893cc5e4750d0f28e586d0d41334"
           fail=0
           report=""
           for a in dist/*.apk; do
@@ -271,4 +276,4 @@ jobs:
 
             ${{ steps.sig.outputs.signer_report }}
 
-            期望 SHA-256：`f698b713674e5d9070fffa8ffdda38212f24f2a5bc40d88d17fc3ea4dd46bea4`
+            期望 SHA-256：`c5e27bffb47bce52d2632b467361f99ccac9893cc5e4750d0f28e586d0d41334`
