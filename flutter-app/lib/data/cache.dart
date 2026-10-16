@@ -135,37 +135,81 @@ class StatusCache {
   }
 }
 
-/// 「你上次刷到这里」锚点：每个信息流记**一条微博 id**（`marker/<feed>.txt`）。
+/// 「你上次刷到这里」+「上次离开时的位置」：每个信息流一个文件
+/// （`marker/<feed>.json`）。
 ///
-/// 为什么记 id 而不是「列表第几条」：index 会被刷新、去重、广告过滤弄漂；
-/// id 不会。而且微博 id **单调递增** —— 越新的 id 越大，所以
-/// 「谁在更靠下的位置」可以**纯靠数字比较**得出（见 `isOlderId`）。
+/// 三样东西一起存：
+///
+///  1. `id` —— 上次刷到的**最深处**那条微博 id。这是列表里分隔条
+///     （`LastSeenBar`）的语义：它以上 = 看过的，以下 = 没看的。只增不减。
+///     之所以记 id 而不是「列表第几条」：index 会被刷新、去重、广告过滤弄漂；
+///     id 不会（微博 id **单调递增** → 大小关系就是先后关系）。
+///  2. `offset` —— 离开时列表的**像素滚动偏移**。「回到离开的地方」靠它。
+///  3. `topId` —— 离开时**视口顶部**那条的 id，恢复后用来**校验落点**。
+///
+/// 为什么敢用像素偏移这种「脆弱」的东西：缓存里存的是服务端**响应原文**，
+/// 重开时走同一套解析还原 → 条目顺序和每条的高度都跟离开时一模一样，
+/// 所以同一个偏移量必然落在同一条上。id 依然保留，因为它**不依赖下标**。
 class ReadMarker {
-  static Future<File> _file(String feed) async =>
+  const ReadMarker({required this.id, this.offset, this.topId});
+
+  /// 最深处那条微博 id（非空才有意义）
+  final String id;
+
+  /// 离开时列表的滚动偏移（像素）；未知为 null
+  final double? offset;
+
+  /// 离开时视口顶部那条的 id；未知为 null
+  final String? topId;
+
+  static Future<File> _json(String feed) async =>
+      File('${(await _sub('marker')).path}/$feed.json');
+
+  /// v1 的老格式：文件里只有一个 id 的纯文本
+  static Future<File> _legacy(String feed) async =>
       File('${(await _sub('marker')).path}/$feed.txt');
 
-  static Future<String?> load(String feed) async {
+  static Future<ReadMarker?> load(String feed) async {
     try {
-      final f = await _file(feed);
-      if (!await f.exists()) return null;
-      final s = (await f.readAsString()).trim();
-      return s.isEmpty ? null : s;
+      final f = await _json(feed);
+      if (await f.exists()) {
+        final m = jsonDecode(await f.readAsString()) as Map<String, Object?>;
+        final id = m['id']?.toString().trim() ?? '';
+        if (id.isEmpty) return null;
+        return ReadMarker(
+          id: id,
+          offset: (m['offset'] as num?)?.toDouble(),
+          topId: m['topId']?.toString(),
+        );
+      }
+      // 兼容老格式：只有 id，没有位置（位置就退回顶部）
+      final l = await _legacy(feed);
+      if (!await l.exists()) return null;
+      final id = (await l.readAsString()).trim();
+      return id.isEmpty ? null : ReadMarker(id: id);
     } catch (_) {
       return null;
     }
   }
 
-  static Future<void> save(String feed, String id) async {
-    if (id.isEmpty) return;
+  static Future<void> save(String feed, ReadMarker m) async {
+    if (m.id.isEmpty) return;
     try {
-      await _atomicWrite(await _file(feed), id);
+      await _atomicWrite(
+        await _json(feed),
+        jsonEncode({'id': m.id, 'offset': m.offset, 'topId': m.topId}),
+      );
+      // 老文件清掉，免得下次读到过期数据
+      final l = await _legacy(feed);
+      if (await l.exists()) await l.delete();
     } catch (_) {}
   }
 
   static Future<void> clear(String feed) async {
     try {
-      final f = await _file(feed);
-      if (await f.exists()) await f.delete();
+      for (final f in [await _json(feed), await _legacy(feed)]) {
+        if (await f.exists()) await f.delete();
+      }
     } catch (_) {}
   }
 }
