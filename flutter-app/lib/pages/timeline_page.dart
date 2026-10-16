@@ -79,6 +79,9 @@ class _TimelinePageState extends State<TimelinePage>
 
   /// 恢复位置最多纠偏几次（懒加载列表的 maxScrollExtent 只是估算值）
   static const _restoreAttempts = 3;
+
+  /// 「你上次刷到这里」那条标记条的大致高度 —— 判断「完整可见」时留的余量
+  static const _markerBarHeight = 48.0;
   late final ScrollController _scroll = widget.controller ?? ScrollController();
   bool get _ownsScroll => widget.controller == null;
 
@@ -392,15 +395,16 @@ class _TimelinePageState extends State<TimelinePage>
       _savedTopId = e is StatusDto ? e.id : null;
     }
 
-    // 本次看见过的**最深**一条：只推内存，**不落盘**。
-    // 用户要求：标记只在切后台/退出时更新 —— 所以滚动过程中绝不能写盘。
-    //
+    // 本次「刷到」的锚点：视口里**完整可见的最后一条**（见 _lastFullyVisibleIndex）；
+    // 整屏长图帖、一条都不完整时，退回视口顶部那条 —— 无论哪种都保证标记在屏内。
+    final anchorIdx = _lastFullyVisibleIndex() ?? _edgeEntryIndex(bottom: false);
+
+    // 只推内存，**不落盘**：用户要求标记只在切后台/退出时更新。
     // 「更深」按下标比（见 `_deepestIndex` 注释），不能按 id 大小。
-    final botIdx = _edgeEntryIndex(bottom: true);
-    if (botIdx != null && botIdx >= 0 && botIdx < entries.length) {
-      final e = entries[botIdx];
-      if (e is StatusDto && botIdx > _deepestIndex) {
-        _deepestIndex = botIdx;
+    if (anchorIdx != null && anchorIdx >= 0 && anchorIdx < entries.length) {
+      final e = entries[anchorIdx];
+      if (e is StatusDto && anchorIdx > _deepestIndex) {
+        _deepestIndex = anchorIdx;
         _deepestId = e.id;
       }
     }
@@ -451,6 +455,29 @@ class _TimelinePageState extends State<TimelinePage>
       final top = s.childScrollOffset(child);
       if (top == null || top > limit) return;
       // `indexOf` 返回非空 int，不必判空
+      final i = s.indexOf(child);
+      if (i > best) best = i;
+    });
+    return best < 0 ? null : best;
+  }
+
+  /// 视口里**完整可见的最后一条**的下标（带一点余量，保证它后面的标记条也在屏内）。
+  ///
+  /// 为什么不用「视口最下面那条」：那条底部被切掉，标记插在它后面会掉到
+  /// **屏幕下沿之外** —— 重开时用户看不到标记，以为功能没生效（真机反馈）。
+  /// 整屏都是长图帖（没有一条完整可见）时返回 null，调用方退回视口顶部那条。
+  int? _lastFullyVisibleIndex() {
+    final s = _sliver();
+    if (s == null || !_scroll.hasClients) return null;
+    final p = _scroll.position;
+    // 留 _markerBarHeight 的余量：让「锚点那条 + 它下面的标记条」都在屏内
+    final limit = p.pixels + p.viewportDimension - _markerBarHeight;
+    var best = -1;
+    s.visitChildren((child) {
+      if (child is! RenderBox) return;
+      final top = s.childScrollOffset(child);
+      if (top == null) return;
+      if (top + child.size.height > limit) return; // 底部够不到 → 不算完整可见
       final i = s.indexOf(child);
       if (i > best) best = i;
     });
