@@ -218,6 +218,8 @@ pub struct CommentDto {
     /// 是否为微博作者本人的评论
     pub is_author: bool,
     pub user: Option<UserDto>,
+    /// 评论配图（原本漏了，导致图片评论只看得到文字）
+    pub images: Vec<String>,
     /// 被回复的评论（递归）
     pub reply_to: Option<Box<CommentDto>>,
 }
@@ -232,6 +234,7 @@ impl From<&Comment> for CommentDto {
             floor: c.floor_number.unwrap_or(0),
             is_author: c.is_author.unwrap_or(false),
             user: c.user.as_ref().map(UserDto::from),
+            images: c.image_urls(),
             reply_to: c
                 .reply_comment
                 .as_ref()

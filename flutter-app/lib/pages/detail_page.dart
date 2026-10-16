@@ -263,6 +263,38 @@ class _CommentsTabState extends State<_CommentsTab> with AutomaticKeepAliveClien
   @override
   Widget build(BuildContext context) {
     super.build(context);
+    // 「发评论」长条按钮固定在评论列表上方（用户要求：放在最上方那条评论之上）。
+    // 固定而不是跟着列表滚：这样列表滚到多深、甚至还没加载出内容，都能直接发评论。
+    return Column(
+      children: [
+        _composeBar(context),
+        const Divider(height: 1),
+        Expanded(child: _list()),
+      ],
+    );
+  }
+
+  Widget _composeBar(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
+      child: SizedBox(
+        width: double.infinity,
+        child: FilledButton.tonalIcon(
+          onPressed: _compose,
+          icon: const Icon(Icons.edit_outlined, size: 18),
+          label: const Text('发评论'),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _compose() async {
+    final ok = await showCommentSheet(context, id: widget.mid);
+    // 发完重拉第一页：按时间排序（flow=1）时新评论应该出现在最前面
+    if (mounted && ok) _load();
+  }
+
+  Widget _list() {
     if (_error != null && _items.isEmpty) return ErrorView(error: _error!, onRetry: _load);
     if (_items.isEmpty && _loading) return const Center(child: CircularProgressIndicator());
     if (_items.isEmpty) {
@@ -365,6 +397,11 @@ class _CommentTile extends StatelessWidget {
                       ),
                     ),
                   SelectableText(comment.text, style: const TextStyle(fontSize: 14.5, height: 1.4)),
+                  // 图片评论：Rust 侧原先没解析 pic_ids/pic_infos，这里一直只有文字。
+                  if (comment.images.isNotEmpty) ...[
+                    const SizedBox(height: 6),
+                    ImageGrid(urls: comment.images),
+                  ],
                   const SizedBox(height: 4),
                   Row(
                     children: [

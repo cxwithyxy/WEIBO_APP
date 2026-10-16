@@ -92,4 +92,42 @@ mod tests {
             "https://wx1.sinaimg.cn/large/abc.jpg"
         );
     }
+
+    /// 评论配图：原先 `Comment` 结构里压根没有 pic_* 字段，
+    /// “图片评论”在客户端里只显示文字、图直接丢了。
+    #[test]
+    fn comment_image_urls() {
+        let pid = "0061aNvTly1ii3f81kwlej30xc104jw6";
+        let raw = format!(
+            r#"{{
+                "idstr": "5354675488424851",
+                "text": "带图评论",
+                "pic_ids": ["{pid}"],
+                "pic_infos": {{
+                    "{pid}": {{
+                        "thumbnail": {{"url": "https://wx1.sinaimg.cn/orj360/{pid}.jpg"}},
+                        "bmiddle":   {{"url": "https://wx1.sinaimg.cn/bmiddle/{pid}.jpg"}},
+                        "large":     {{"url": "https://wx1.sinaimg.cn/large/{pid}.jpg"}}
+                    }}
+                }},
+                "pic_num": 1
+            }}"#
+        );
+        let c: models::Comment = serde_json::from_str(&raw).unwrap();
+        assert_eq!(c.pic_num, Some(1));
+        let urls = c.image_urls();
+        assert_eq!(urls.len(), 1);
+        // 降级链的第一档是 bmiddle
+        assert!(urls[0].contains("/bmiddle/"), "应优先 bmiddle，实际 {urls:?}");
+    }
+
+    /// `pic_infos` 缺失时不能丢图：按 id 拼 wap360 兜底（与微博本体同一套行为）。
+    #[test]
+    fn comment_image_fallback() {
+        let c: models::Comment = serde_json::from_str(r#"{"pic_ids":["abc"]}"#).unwrap();
+        assert_eq!(
+            c.image_urls(),
+            vec!["https://wx1.sinaimg.cn/wap360/abc.jpg".to_string()]
+        );
+    }
 }

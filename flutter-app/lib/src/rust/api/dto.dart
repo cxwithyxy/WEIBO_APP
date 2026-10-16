@@ -24,6 +24,9 @@ class CommentDto {
   final bool isAuthor;
   final UserDto? user;
 
+  /// 评论配图（原本漏了，导致图片评论只看得到文字）
+  final List<String> images;
+
   /// 被回复的评论（递归）
   final CommentDto? replyTo;
 
@@ -35,6 +38,7 @@ class CommentDto {
     required this.floor,
     required this.isAuthor,
     this.user,
+    required this.images,
     this.replyTo,
   });
 
@@ -50,6 +54,7 @@ class CommentDto {
       floor.hashCode ^
       isAuthor.hashCode ^
       user.hashCode ^
+      images.hashCode ^
       replyTo.hashCode;
 
   @override
@@ -64,6 +69,7 @@ class CommentDto {
           floor == other.floor &&
           isAuthor == other.isAuthor &&
           user == other.user &&
+          images == other.images &&
           replyTo == other.replyTo;
 }
 

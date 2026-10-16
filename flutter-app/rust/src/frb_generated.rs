@@ -1951,6 +1951,7 @@ impl SseDecode for crate::api::dto::CommentDto {
         let mut var_floor = <i32>::sse_decode(deserializer);
         let mut var_isAuthor = <bool>::sse_decode(deserializer);
         let mut var_user = <Option<crate::api::dto::UserDto>>::sse_decode(deserializer);
+        let mut var_images = <Vec<String>>::sse_decode(deserializer);
         let mut var_replyTo = <Option<Box<crate::api::dto::CommentDto>>>::sse_decode(deserializer);
         return crate::api::dto::CommentDto {
             id: var_id,
@@ -1960,6 +1961,7 @@ impl SseDecode for crate::api::dto::CommentDto {
             floor: var_floor,
             is_author: var_isAuthor,
             user: var_user,
+            images: var_images,
             reply_to: var_replyTo,
         };
     }
@@ -2478,6 +2480,7 @@ impl flutter_rust_bridge::IntoDart for crate::api::dto::CommentDto {
             self.floor.into_into_dart().into_dart(),
             self.is_author.into_into_dart().into_dart(),
             self.user.into_into_dart().into_dart(),
+            self.images.into_into_dart().into_dart(),
             self.reply_to.into_into_dart().into_dart(),
         ]
         .into_dart()
@@ -2786,6 +2789,7 @@ impl SseEncode for crate::api::dto::CommentDto {
         <i32>::sse_encode(self.floor, serializer);
         <bool>::sse_encode(self.is_author, serializer);
         <Option<crate::api::dto::UserDto>>::sse_encode(self.user, serializer);
+        <Vec<String>>::sse_encode(self.images, serializer);
         <Option<Box<crate::api::dto::CommentDto>>>::sse_encode(self.reply_to, serializer);
     }
 }

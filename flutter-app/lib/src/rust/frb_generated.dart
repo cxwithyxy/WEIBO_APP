@@ -1850,8 +1850,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   CommentDto dco_decode_comment_dto(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
-    if (arr.length != 8)
-      throw Exception('unexpected arr length: expect 8 but see ${arr.length}');
+    if (arr.length != 9)
+      throw Exception('unexpected arr length: expect 9 but see ${arr.length}');
     return CommentDto(
       id: dco_decode_String(arr[0]),
       time: dco_decode_String(arr[1]),
@@ -1860,7 +1860,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       floor: dco_decode_i_32(arr[4]),
       isAuthor: dco_decode_bool(arr[5]),
       user: dco_decode_opt_box_autoadd_user_dto(arr[6]),
-      replyTo: dco_decode_opt_box_comment_dto(arr[7]),
+      images: dco_decode_list_String(arr[7]),
+      replyTo: dco_decode_opt_box_comment_dto(arr[8]),
     );
   }
 
@@ -2213,6 +2214,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     var var_floor = sse_decode_i_32(deserializer);
     var var_isAuthor = sse_decode_bool(deserializer);
     var var_user = sse_decode_opt_box_autoadd_user_dto(deserializer);
+    var var_images = sse_decode_list_String(deserializer);
     var var_replyTo = sse_decode_opt_box_comment_dto(deserializer);
     return CommentDto(
       id: var_id,
@@ -2222,6 +2224,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       floor: var_floor,
       isAuthor: var_isAuthor,
       user: var_user,
+      images: var_images,
       replyTo: var_replyTo,
     );
   }
@@ -2665,6 +2668,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     sse_encode_i_32(self.floor, serializer);
     sse_encode_bool(self.isAuthor, serializer);
     sse_encode_opt_box_autoadd_user_dto(self.user, serializer);
+    sse_encode_list_String(self.images, serializer);
     sse_encode_opt_box_comment_dto(self.replyTo, serializer);
   }
 

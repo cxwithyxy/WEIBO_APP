@@ -41,7 +41,8 @@ class TimelinePage extends StatefulWidget {
   State<TimelinePage> createState() => _TimelinePageState();
 }
 
-class _TimelinePageState extends State<TimelinePage> with AutomaticKeepAliveClientMixin {
+class _TimelinePageState extends State<TimelinePage>
+    with AutomaticKeepAliveClientMixin, WidgetsBindingObserver {
   final _items = <StatusDto>[];
 
   /// 已出现过的微博 id —— 跨页去重用（见 util/dedup.dart）
@@ -51,15 +52,20 @@ class _TimelinePageState extends State<TimelinePage> with AutomaticKeepAliveClie
   final _listKey = GlobalKey();
 
   /// 「你上次刷到这里」锚点：进页面时从磁盘读一次，**本次会话固定不动**
+  ///
+  /// 它是**常驻**的：即使锚点那条微博当前不在列表里（被翻页裁掉等），
+  /// `_entries()` 也会用 id 大小把它插到正确的相对位置 —— 不能让标记凭空消失。
   String? _markerAnchorId;
 
-  /// 本次会话滚到的最深处（微博 id，越小越靠下）—— 未读边界，只增不减
-  String? _seenId;
+  /// 本次会话看见过的**最深**一条（微博 id，越小越靠下）。
+  ///
+  /// 只在内存里跟 —— **不落盘**。用户要求：滚动过程中不更新标记，
+  /// 只有 App 切后台或退出时，才把它写下去当作新的「上次刷到这里」。
+  String? _deepestId;
 
   /// 离开时列表的滚动偏移 + 视口顶部那条的 id —— 「回到离开的地方」用
   double? _savedOffset;
   String? _savedTopId;
-  Timer? _saveTimer;
 
   /// 正在做「恢复位置」：这段时间的滚动是程序跳的，不该污染盘上的离开位置
   bool _restoring = false;
@@ -88,6 +94,8 @@ class _TimelinePageState extends State<TimelinePage> with AutomaticKeepAliveClie
   @override
   void initState() {
     super.initState();
+    // 监听 App 级生命周期：切后台 / 退回前台 / 进程分离 —— 见 didChangeAppLifecycleState
+    WidgetsBinding.instance.addObserver(this);
     _scroll.addListener(_onScroll);
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       // 锚点要在渲染前就绪（否则列表先出来、标记再插进去会跳一下）
@@ -95,12 +103,13 @@ class _TimelinePageState extends State<TimelinePage> with AutomaticKeepAliveClie
       if (!mounted) return;
       setState(() {
         _markerAnchorId = m?.id;
-        _seenId = m?.id;
+        _deepestId = m?.id;
         _savedOffset = m?.offset;
         _savedTopId = m?.topId;
       });
       final restored = await _loadFromCache();
       if (!mounted) return;
+      _ensureMarkerAnchor();
       // ★ 有缓存就**不自动刷新**。
       //   之前这里无条件 refresh()，而 refresh() 会把整个列表换成最新一页
       //   → 上次刷到的位置连同那些旧条目一起被冲掉，「上次刷到哪」等于没生效
@@ -115,13 +124,32 @@ class _TimelinePageState extends State<TimelinePage> with AutomaticKeepAliveClie
 
   @override
   void dispose() {
-    // 用户要求「后退离开列表页时记录」——这里兜底再写一次。
-    // 平时滚动停止时就已防抖写过盘，所以这一步基本是幂等的；
-    // 之所以不只靠 dispose，是因为本页 keepAlive，切 tab 时根本不会 dispose。
-    _saveTimer?.cancel();
-    unawaited(_saveMarkerNow());
+    WidgetsBinding.instance.removeObserver(this);
+    // 退出/离场时的兜底：本页 keepAlive，切 tab 不会 dispose，
+    // 所以「关闭 App」「返回退出」主要靠 didChangeAppLifecycleState。
+    unawaited(_commitMarker());
     if (_ownsScroll) _scroll.dispose();
     super.dispose();
+  }
+
+  /// 切后台 / 退出 —— 用户要求：**只有这两个时机**才更新「上次刷到这里」。
+  ///
+  /// 这几种状态都算「离开」：
+  ///  - `inactive`：切到后台/来电/多任务面板（最灵敏，先落盘）
+  ///  - `hidden`：完全被遮住
+  ///  - `paused`：进入后台（Android 上就是这个）
+  ///  - `detached`：View 已分离、进程即将结束
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    switch (state) {
+      case AppLifecycleState.inactive:
+      case AppLifecycleState.hidden:
+      case AppLifecycleState.paused:
+      case AppLifecycleState.detached:
+        unawaited(_commitMarker());
+      case AppLifecycleState.resumed:
+        break;
+    }
   }
 
   void _onScroll() {
@@ -169,10 +197,12 @@ class _TimelinePageState extends State<TimelinePage> with AutomaticKeepAliveClie
     return true;
   }
 
-  /// 把「未读边界 + 离开时的位置」写盘（防抖与 dispose 都走这里）
-  Future<void> _saveMarkerNow() async {
+  /// 把「本次看见过的最深一条 + 离开时的位置」写盘成新的「上次刷到这里」。
+  ///
+  /// **只在切后台 / 退出时调用**（用户要求：滚动时不动标记，刷新也不动标记）。
+  Future<void> _commitMarker() async {
     if (_restoring) return; // 恢复途中跳来跳去的中间态不写盘
-    final id = _seenId;
+    final id = _deepestId;
     if (id == null || id.isEmpty) return;
     await ReadMarker.save(
       _feedKey,
@@ -180,11 +210,16 @@ class _TimelinePageState extends State<TimelinePage> with AutomaticKeepAliveClie
     );
   }
 
-  void _scheduleSave() {
-    _saveTimer?.cancel();
-    _saveTimer = Timer(const Duration(milliseconds: 600), () {
-      unawaited(_saveMarkerNow());
-    });
+  /// 保证「始终有一个标记」：磁盘上没有（首次装、标记文件被清）就取当前第一条。
+  ///
+  /// 用户反馈「还是看不到标记」，根因就是没标记时 `_entries()` 什么也不插 ——
+  /// 现在没标记也会就地立一个，列表里总能看到这条分割线。
+  void _ensureMarkerAnchor() {
+    if (_markerAnchorId != null) return;
+    final vis = _visibleItems();
+    if (vis.isEmpty) return;
+    _markerAnchorId = vis.first.id;
+    _deepestId ??= vis.first.id;
   }
 
   Future<void> _persist() =>
@@ -217,26 +252,40 @@ class _TimelinePageState extends State<TimelinePage> with AutomaticKeepAliveClie
       final fresh = dedupById(p.statuses, (s) => s.id);
       final cursor = p.nextCursor ?? '';
       setState(() {
-        _items
-          ..clear()
-          ..addAll(fresh);
-        _seen
-          ..clear()
-          ..addAll(fresh.map((s) => s.id));
-        _pages.clear();
-        if (p.raw.isNotEmpty) _pages.add(p.raw);
-        _cursor = cursor;
-        _page = 2;
-        _hasMore = p.statuses.length >= 20 && _cursorAdvanced(cursor, '');
+        if (_items.isEmpty) {
+          // 首次：整页铺开
+          _items
+            ..clear()
+            ..addAll(fresh);
+          _seen
+            ..clear()
+            ..addAll(fresh.map((s) => s.id));
+          _pages.clear();
+          if (p.raw.isNotEmpty) _pages.add(p.raw);
+          _cursor = cursor;
+          _page = 2;
+          _hasMore = p.statuses.length >= 20 && _cursorAdvanced(cursor, '');
+        } else {
+          // 已有内容：**只往前面插入「从未见过的新微博」**，其余原地不动。
+          //
+          // 为什么要 prepend 而不是整页替换：替换会把锚点那条一并冲掉，
+          // 「上次刷到这里」的分割线就没了 —— 用户反馈的正是这个。
+          // 插到前面后，锚点仍在列表里、且在内容上的位置不变。
+          // `_cursor` / `_page` 同样**不能动**：那是「继续往下翻旧内容」用的。
+          final newOnes = fresh
+              .where((s) => !_seen.contains(s.id))
+              .toList(growable: false);
+          if (newOnes.isNotEmpty) {
+            _items.insertAll(0, newOnes);
+            _seen.addAll(newOnes.map((s) => s.id));
+            // 缓存存的是原文：新页插到最前，重开时按顺序解析 + 去重，
+            // 第一条优先保留 → 还原出来的顺序与新页在前一致。
+            if (p.raw.isNotEmpty) _pages.insert(0, p.raw);
+          }
+        }
+        _ensureMarkerAnchor();
       });
-      // 主动刷新 = 回到最新 → 恢复点也归零。
-      // 否则下次进来会跳到「已被这次刷新丢掉」的深处（那个偏移还留着）。
-      final vis = _visibleItems();
-      _savedOffset = 0;
-      _savedTopId = vis.isEmpty ? null : vis.first.id;
-      if (_seenId == null && vis.isNotEmpty) _seenId = vis.first.id;
       await _persist();
-      await _saveMarkerNow();
     } catch (e) {
       if (!mounted) return;
       // 有缓存时网络失败不覆盖屏幕（继续看缓存），只提示
@@ -286,15 +335,37 @@ class _TimelinePageState extends State<TimelinePage> with AutomaticKeepAliveClie
     return visible.indexWhere((s) => s.id == id);
   }
 
-  /// 把 visible 展开成实际渲染序列：微博条目 + （可能一条）锚点占位
+  /// 把 visible 展开成实际渲染序列：微博条目 + （始终一条）锚点占位
   List<Object> _entries(List<StatusDto> visible) {
-    final at = _markerAt(visible);
     final out = <Object>[];
-    for (var i = 0; i < visible.length; i++) {
-      out.add(visible[i]);
-      // 用户要的效果：C（上次刷到的）和 D（更早的）之间
-      if (i == at) out.add(const _MarkerToken());
+    if (visible.isEmpty) return out;
+    final at = _markerAt(visible);
+    if (at >= 0) {
+      for (var i = 0; i < visible.length; i++) {
+        out.add(visible[i]);
+        // 用户要的效果：C（上次刷到的）和 D（更早的）之间
+        if (i == at) out.add(const _MarkerToken());
+      }
+      return out;
     }
+
+    // 锚点那条当前不在列表里（被翻页裁掉 / 刷掉了）——
+    // **不能让标记凭空消失**，改用 id 大小定位相对位置：
+    // id 越小 = 发布越早 = 在列表里越靠下，所以第一条「比锚点更早」之前就是它该在的位置。
+    final id = _markerAnchorId;
+    if (id == null) return List<Object>.of(visible);
+    var pos = visible.length; // 默认：比现有全部条目都旧 → 落到末尾
+    for (var i = 0; i < visible.length; i++) {
+      if (_isOlder(id, visible[i].id)) {
+        pos = i;
+        break;
+      }
+    }
+    for (var i = 0; i < visible.length; i++) {
+      if (i == pos) out.add(const _MarkerToken());
+      out.add(visible[i]);
+    }
+    if (pos >= visible.length) out.add(const _MarkerToken());
     return out;
   }
 
@@ -320,7 +391,7 @@ class _TimelinePageState extends State<TimelinePage> with AutomaticKeepAliveClie
     if (!mounted || _items.isEmpty || !_scroll.hasClients) return;
     final entries = _entries(_visibleItems());
 
-    // ② 位置：无条件跟
+    // 离开时的位置：滚上滚下都跟（只存内存，切后台/退出时一起落盘）
     _savedOffset = _scroll.position.pixels;
     final topIdx = _edgeEntryIndex(bottom: false);
     if (topIdx != null && topIdx >= 0 && topIdx < entries.length) {
@@ -328,17 +399,16 @@ class _TimelinePageState extends State<TimelinePage> with AutomaticKeepAliveClie
       _savedTopId = e is StatusDto ? e.id : null;
     }
 
-    // ① 边界：只有更深才推进
+    // 本次看见过的**最深**一条：只推内存，**不落盘**。
+    // 用户要求：标记只在切后台/退出时更新 —— 所以滚动过程中绝不能写盘。
     final botIdx = _edgeEntryIndex(bottom: true);
     if (botIdx != null && botIdx >= 0 && botIdx < entries.length) {
       final e = entries[botIdx];
       if (e is StatusDto) {
-        final cur = _seenId;
-        if (cur == null || _isOlder(e.id, cur)) _seenId = e.id;
+        final cur = _deepestId;
+        if (cur == null || _isOlder(e.id, cur)) _deepestId = e.id;
       }
     }
-
-    _scheduleSave();
   }
 
   /// 列表内部的 Sliver（拿不到就 null）

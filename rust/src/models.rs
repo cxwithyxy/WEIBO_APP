@@ -175,23 +175,37 @@ impl Status {
 
     /// 配图 URL（优先 bmiddle 中等尺寸）
     pub fn image_urls(&self) -> Vec<String> {
-        let ids = self.pic_ids.clone().unwrap_or_default();
-        ids.into_iter()
-            .map(|id| {
-                self.pic_infos
-                    .as_ref()
-                    .and_then(|m| m.get(&id))
-                    .and_then(|p| {
-                        p.bmiddle
-                            .as_ref()
-                            .and_then(|x| x.url.clone())
-                            .or_else(|| p.thumbnail.as_ref().and_then(|x| x.url.clone()))
-                            .or_else(|| p.large.as_ref().and_then(|x| x.url.clone()))
-                    })
-                    .unwrap_or_else(|| format!("https://wx1.sinaimg.cn/wap360/{id}.jpg"))
-            })
-            .collect()
+        pic_urls(&self.pic_ids, &self.pic_infos)
     }
+}
+
+/// `pic_ids` + `pic_infos` → 可直接加载的 URL 列表。
+///
+/// **微博与评论共用**：评论的图片字段形状和微博完全一样（`pic_ids` 给顺序，
+/// `pic_infos` 是按 id 索引的字典），所以抽成一个函数，避免两处各写一份
+/// 「取 bmiddle → 退 thumbnail → 退 large → 兜底拼 wap360」的降级链。
+pub(crate) fn pic_urls(
+    pic_ids: &Option<Vec<String>>,
+    pic_infos: &Option<HashMap<String, PicInfo>>,
+) -> Vec<String> {
+    pic_ids
+        .clone()
+        .unwrap_or_default()
+        .into_iter()
+        .map(|id| {
+            pic_infos
+                .as_ref()
+                .and_then(|m| m.get(&id))
+                .and_then(|p| {
+                    p.bmiddle
+                        .as_ref()
+                        .and_then(|x| x.url.clone())
+                        .or_else(|| p.thumbnail.as_ref().and_then(|x| x.url.clone()))
+                        .or_else(|| p.large.as_ref().and_then(|x| x.url.clone()))
+                })
+                .unwrap_or_else(|| format!("https://wx1.sinaimg.cn/wap360/{id}.jpg"))
+        })
+        .collect()
 }
 
 #[cfg_attr(feature = "uniffi-ffi", derive(uniffi::Record))]
@@ -228,9 +242,22 @@ pub struct Comment {
     pub user: Option<User>,
     #[serde(default, rename = "reply_comment")]
     pub reply_comment: Option<Box<Comment>>,
+    /// 评论配图 —— 字段形状与 `Status` 一致（原先缺这三个字段，
+    /// 导致「图片评论」在客户端里只显示文字，图直接丢了）。
+    #[serde(default, rename = "pic_ids")]
+    pub pic_ids: Option<Vec<String>>,
+    #[serde(default, rename = "pic_infos")]
+    pub pic_infos: Option<HashMap<String, PicInfo>>,
+    #[serde(default, rename = "pic_num")]
+    pub pic_num: Option<i32>,
 }
 
 impl Comment {
+    /// 评论配图 URL 列表（复用 `Status` 的同一套还原逻辑）。
+    pub fn image_urls(&self) -> Vec<String> {
+        pic_urls(&self.pic_ids, &self.pic_infos)
+    }
+
     pub fn plain_text(&self) -> String {
         if let Some(t) = &self.text_raw {
             return t.clone();
