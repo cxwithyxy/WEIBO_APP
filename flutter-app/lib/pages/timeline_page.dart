@@ -8,6 +8,7 @@ import '../session.dart';
 import '../src/rust/api/dto.dart';
 import '../src/rust/api/weibo.dart' as api;
 import '../util/dedup.dart';
+import '../util/marker_place.dart';
 import '../widgets/common.dart';
 import '../widgets/status_card.dart';
 import 'detail_page.dart';
@@ -57,11 +58,17 @@ class _TimelinePageState extends State<TimelinePage>
   /// `_entries()` 也会用 id 大小把它插到正确的相对位置 —— 不能让标记凭空消失。
   String? _markerAnchorId;
 
-  /// 本次会话看见过的**最深**一条（微博 id，越小越靠下）。
+  /// 本次会话看见过的**最深**一条（只存内存，`_deepestId` 是它的微博 id）。
+  ///
+  /// ⚠️ 「更深」用**列表下标**（`_deepestIndex`）判断，**不能**用 id 大小：
+  /// 关注流里会夹着**置顶微博**（id 很小、却排在最前），一旦拿 id 比大小，
+  /// 标记就会被置顶那条钉死、之后永远不再推进 ——
+  /// 真机上的表现就是「不管怎么滑，标记都挂在顶部」。
   ///
   /// 只在内存里跟 —— **不落盘**。用户要求：滚动过程中不更新标记，
   /// 只有 App 切后台或退出时，才把它写下去当作新的「上次刷到这里」。
   String? _deepestId;
+  int _deepestIndex = -1;
 
   /// 离开时列表的滚动偏移 + 视口顶部那条的 id —— 「回到离开的地方」用
   double? _savedOffset;
@@ -202,7 +209,9 @@ class _TimelinePageState extends State<TimelinePage>
   /// **只在切后台 / 退出时调用**（用户要求：滚动时不动标记，刷新也不动标记）。
   Future<void> _commitMarker() async {
     if (_restoring) return; // 恢复途中跳来跳去的中间态不写盘
-    final id = _deepestId;
+    // 位置（offset/topId）每次都要存，否则「回到离开的地方」会失效；
+    // 标记 id 优先用本会话真的读到的位置，没读过则沿用原来的锚点。
+    final id = _deepestId ?? _markerAnchorId;
     if (id == null || id.isEmpty) return;
     await ReadMarker.save(
       _feedKey,
@@ -350,33 +359,17 @@ class _TimelinePageState extends State<TimelinePage>
     }
 
     // 锚点那条当前不在列表里（被翻页裁掉 / 刷掉了）——
-    // **不能让标记凭空消失**，改用 id 大小定位相对位置：
-    // id 越小 = 发布越早 = 在列表里越靠下，所以第一条「比锚点更早」之前就是它该在的位置。
+    // **不能让标记凭空消失**，按 id 找它“本该在”的位置（见 util/marker_place.dart，
+    // 那里有测试锁着方向 + 置顶微博的坑）。
     final id = _markerAnchorId;
     if (id == null) return List<Object>.of(visible);
-    var pos = visible.length; // 默认：比现有全部条目都旧 → 落到末尾
-    for (var i = 0; i < visible.length; i++) {
-      if (_isOlder(id, visible[i].id)) {
-        pos = i;
-        break;
-      }
-    }
+    final pos = markerInsertIndex(visible.map((s) => s.id).toList(), id);
     for (var i = 0; i < visible.length; i++) {
       if (i == pos) out.add(const _MarkerToken());
       out.add(visible[i]);
     }
     if (pos >= visible.length) out.add(const _MarkerToken());
     return out;
-  }
-
-  /// 微博 id **单调递增** → id 更小 = 发布更早 = 在列表里更靠下。
-  /// 用 BigInt 比（19 位数字会超 int64），解析失败就当「不比它更早」。
-  bool _isOlder(String a, String b) {
-    try {
-      return BigInt.parse(a) < BigInt.parse(b);
-    } catch (_) {
-      return false;
-    }
   }
 
   /// 滚动停止 → 记两样东西：
@@ -401,12 +394,14 @@ class _TimelinePageState extends State<TimelinePage>
 
     // 本次看见过的**最深**一条：只推内存，**不落盘**。
     // 用户要求：标记只在切后台/退出时更新 —— 所以滚动过程中绝不能写盘。
+    //
+    // 「更深」按下标比（见 `_deepestIndex` 注释），不能按 id 大小。
     final botIdx = _edgeEntryIndex(bottom: true);
     if (botIdx != null && botIdx >= 0 && botIdx < entries.length) {
       final e = entries[botIdx];
-      if (e is StatusDto) {
-        final cur = _deepestId;
-        if (cur == null || _isOlder(e.id, cur)) _deepestId = e.id;
+      if (e is StatusDto && botIdx > _deepestIndex) {
+        _deepestIndex = botIdx;
+        _deepestId = e.id;
       }
     }
   }
