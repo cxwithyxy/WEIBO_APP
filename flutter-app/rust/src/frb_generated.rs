@@ -2260,6 +2260,11 @@ impl SseDecode for crate::api::dto::StatusDto {
         let mut var_isAd = <bool>::sse_decode(deserializer);
         let mut var_isLongText = <bool>::sse_decode(deserializer);
         let mut var_user = <Option<crate::api::dto::UserDto>>::sse_decode(deserializer);
+        let mut var_isVideo = <bool>::sse_decode(deserializer);
+        let mut var_videoUrl = <Option<String>>::sse_decode(deserializer);
+        let mut var_videoCoverUrl = <Option<String>>::sse_decode(deserializer);
+        let mut var_videoDuration = <Option<i64>>::sse_decode(deserializer);
+        let mut var_videoFromRetweeted = <bool>::sse_decode(deserializer);
         let mut var_retweeted = <Option<Box<crate::api::dto::StatusDto>>>::sse_decode(deserializer);
         return crate::api::dto::StatusDto {
             id: var_id,
@@ -2273,6 +2278,11 @@ impl SseDecode for crate::api::dto::StatusDto {
             is_ad: var_isAd,
             is_long_text: var_isLongText,
             user: var_user,
+            is_video: var_isVideo,
+            video_url: var_videoUrl,
+            video_cover_url: var_videoCoverUrl,
+            video_duration: var_videoDuration,
+            video_from_retweeted: var_videoFromRetweeted,
             retweeted: var_retweeted,
         };
     }
@@ -2635,6 +2645,11 @@ impl flutter_rust_bridge::IntoDart for crate::api::dto::StatusDto {
             self.is_ad.into_into_dart().into_dart(),
             self.is_long_text.into_into_dart().into_dart(),
             self.user.into_into_dart().into_dart(),
+            self.is_video.into_into_dart().into_dart(),
+            self.video_url.into_into_dart().into_dart(),
+            self.video_cover_url.into_into_dart().into_dart(),
+            self.video_duration.into_into_dart().into_dart(),
+            self.video_from_retweeted.into_into_dart().into_dart(),
             self.retweeted.into_into_dart().into_dart(),
         ]
         .into_dart()
@@ -3040,6 +3055,11 @@ impl SseEncode for crate::api::dto::StatusDto {
         <bool>::sse_encode(self.is_ad, serializer);
         <bool>::sse_encode(self.is_long_text, serializer);
         <Option<crate::api::dto::UserDto>>::sse_encode(self.user, serializer);
+        <bool>::sse_encode(self.is_video, serializer);
+        <Option<String>>::sse_encode(self.video_url, serializer);
+        <Option<String>>::sse_encode(self.video_cover_url, serializer);
+        <Option<i64>>::sse_encode(self.video_duration, serializer);
+        <bool>::sse_encode(self.video_from_retweeted, serializer);
         <Option<Box<crate::api::dto::StatusDto>>>::sse_encode(self.retweeted, serializer);
     }
 }

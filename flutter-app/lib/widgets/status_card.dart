@@ -6,6 +6,7 @@ import '../src/rust/api/weibo.dart' as api;
 import '../pages/user_page.dart';
 import 'actions.dart';
 import 'common.dart';
+import 'video_cover.dart';
 
 /// 微博卡片。
 ///
@@ -64,10 +65,12 @@ class _StatusCardState extends State<StatusCard> {
       if (!mounted) return;
       ScaffoldMessenger.of(context)
         ..clearSnackBars()
-        ..showSnackBar(SnackBar(
-          content: Text(wantLike ? '已点赞' : '已取消赞'),
-          duration: const Duration(seconds: 1),
-        ));
+        ..showSnackBar(
+          SnackBar(
+            content: Text(wantLike ? '已点赞' : '已取消赞'),
+            duration: const Duration(seconds: 1),
+          ),
+        );
     } catch (e) {
       // 回滚
       if (!mounted) return;
@@ -86,14 +89,18 @@ class _StatusCardState extends State<StatusCard> {
   void _repost() => showRepostSheet(context, widget.status);
 
   void _comment() => showCommentSheet(
-        context,
-        id: widget.status.id,
-        subtitle: '评论 @${widget.status.user?.name ?? ''}',
-      );
+    context,
+    id: widget.status.id,
+    subtitle: '评论 @${widget.status.user?.name ?? ''}',
+  );
 
   @override
   Widget build(BuildContext context) {
     final s = widget.status;
+    // 视频回退到转发块时（`videoFromRetweeted`），封面画在转发块里；
+    // 否则画在卡片层。**两层只画一次**，否则转发视频会出现两张封面。
+    final showCardVideo =
+        s.videoUrl != null && s.videoUrl!.isNotEmpty && !s.videoFromRetweeted;
     return InkWell(
       onTap: widget.onTap,
       child: Padding(
@@ -105,13 +112,21 @@ class _StatusCardState extends State<StatusCard> {
             const SizedBox(height: 8),
             if (s.text.isNotEmpty)
               _BodyText(status: s, expandByDefault: widget.expandByDefault),
-            if (s.images.isNotEmpty) ...[
+            if (showCardVideo) ...[
+              const SizedBox(height: 8),
+              _VideoBlock(status: s),
+            ] else if (s.images.isNotEmpty) ...[
               const SizedBox(height: 8),
               ImageGrid(urls: s.images),
             ],
             if (s.retweeted != null) ...[
               const SizedBox(height: 8),
-              _RetweetBox(status: s.retweeted!),
+              _RetweetBox(
+                status: s.retweeted!,
+                // 外层视频来自转发块 → 封面画进转发块；否则转发块自身的视频
+                // 被外层「消化」掉了，这里不再重复画。
+                showVideo: s.videoFromRetweeted,
+              ),
             ],
             const SizedBox(height: 6),
             if (widget.showActions) _actions(s) else _metrics(s),
@@ -147,7 +162,10 @@ class _StatusCardState extends State<StatusCard> {
         if (s.isLongText)
           const Padding(
             padding: EdgeInsets.only(left: 8),
-            child: Text('长文', style: TextStyle(fontSize: 11, color: Colors.grey)),
+            child: Text(
+              '长文',
+              style: TextStyle(fontSize: 11, color: Colors.grey),
+            ),
           ),
       ],
     );
@@ -183,7 +201,10 @@ class _StatusCardState extends State<StatusCard> {
             const SizedBox(width: 6),
             Text(
               label,
-              style: TextStyle(fontSize: 12.5, color: color ?? Colors.grey.shade600),
+              style: TextStyle(
+                fontSize: 12.5,
+                color: color ?? Colors.grey.shade600,
+              ),
             ),
           ],
         ),
@@ -220,9 +241,9 @@ class _Header extends StatelessWidget {
         GestureDetector(
           onTap: (u == null || u.id.isEmpty)
               ? null
-              : () => Navigator.of(context).push(
-                    MaterialPageRoute(builder: (_) => UserPage(uid: u.id)),
-                  ),
+              : () => Navigator.of(
+                  context,
+                ).push(MaterialPageRoute(builder: (_) => UserPage(uid: u.id))),
           child: Avatar(url: u?.avatar ?? '', size: 40),
         ),
         const SizedBox(width: 8),
@@ -235,20 +256,29 @@ class _Header extends StatelessWidget {
                   Flexible(
                     child: Text(
                       u?.name ?? '(未知用户)',
-                      style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14.5),
+                      style: const TextStyle(
+                        fontWeight: FontWeight.w600,
+                        fontSize: 14.5,
+                      ),
                       overflow: TextOverflow.ellipsis,
                     ),
                   ),
                   if (u?.verified == true)
                     const Padding(
                       padding: EdgeInsets.only(left: 4),
-                      child: Icon(Icons.verified, size: 14, color: Colors.orange),
+                      child: Icon(
+                        Icons.verified,
+                        size: 14,
+                        color: Colors.orange,
+                      ),
                     ),
                 ],
               ),
               const SizedBox(height: 1),
               Text(
-                status.source.isEmpty ? status.time : '${status.time} · ${status.source}',
+                status.source.isEmpty
+                    ? status.time
+                    : '${status.time} · ${status.source}',
                 style: TextStyle(fontSize: 11.5, color: Colors.grey.shade600),
                 overflow: TextOverflow.ellipsis,
               ),
@@ -262,7 +292,10 @@ class _Header extends StatelessWidget {
               border: Border.all(color: Colors.grey.shade400),
               borderRadius: BorderRadius.circular(3),
             ),
-            child: Text('广告', style: TextStyle(fontSize: 10, color: Colors.grey.shade600)),
+            child: Text(
+              '广告',
+              style: TextStyle(fontSize: 10, color: Colors.grey.shade600),
+            ),
           ),
       ],
     );
@@ -317,9 +350,8 @@ class _BodyTextState extends State<_BodyText> {
       setState(() => _full = t ?? widget.status.text);
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('长文加载失败：${describeError(e)}')),
-      );
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text('长文加载失败：${describeError(e)}')));
     } finally {
       if (mounted) setState(() => _loading = false);
     }
@@ -337,24 +369,64 @@ class _BodyTextState extends State<_BodyText> {
         // 需要选择/复制就去详情页 —— 那边整体包在 SelectionArea 里。
         Text(text, style: const TextStyle(fontSize: 15.5, height: 1.45)),
         // 默认展开模式下不再给「展开全文」按钮（已在自动拉取）
-        if (!widget.expandByDefault && widget.status.isLongText && _full == null)
+        if (!widget.expandByDefault &&
+            widget.status.isLongText &&
+            _full == null)
           GestureDetector(
             onTap: _loading ? null : _loadFull,
             child: Padding(
               padding: const EdgeInsets.only(top: 4),
               child: Text(
                 _loading ? '加载中…' : '展开全文',
-                style: const TextStyle(fontSize: 13.5, color: Color(0xFFE6162D)),
+                style: const TextStyle(
+                  fontSize: 13.5,
+                  color: Color(0xFFE6162D),
+                ),
               ),
             ),
           ),
         if (widget.expandByDefault && widget.status.isLongText && _loading)
           const Padding(
             padding: EdgeInsets.only(top: 4),
-            child: Text('正在展开全文…',
-                style: TextStyle(fontSize: 12.5, color: Colors.grey)),
+            child: Text(
+              '正在展开全文…',
+              style: TextStyle(fontSize: 12.5, color: Colors.grey),
+            ),
           ),
       ],
+    );
+  }
+}
+
+// ------------------------------------------------------------------ 视频块
+
+/// 视频块：封面 + 播放按钮 + 时长角标；点它进全屏播放器。
+///
+/// 只负责「展示 + 跳转」，播放/URL 刷新/文件缓存都在全屏页里
+/// （见 `video_player_page.dart`）。传 [StatusDto.id]（即 mid）过去，
+/// 播放器才能按条命中缓存、并在列表 URL 过期时刷新。
+/// 封面仍走 `VideoCover` 的图片缓存（CachedNetworkImage）。
+class _VideoBlock extends StatelessWidget {
+  const _VideoBlock({required this.status});
+
+  final StatusDto status;
+
+  @override
+  Widget build(BuildContext context) {
+    final url = status.videoUrl;
+    if (url == null || url.isEmpty) return const SizedBox.shrink();
+    return VideoCover(
+      coverUrl: status.videoCoverUrl,
+      durationSecs: status.videoDuration == null
+          ? null
+          : p64Int(status.videoDuration),
+      onPlay: () => openVideoPlayer(
+        context,
+        url: url,
+        mid: status.id,
+        cover: status.videoCoverUrl,
+        title: status.user?.name,
+      ),
     );
   }
 }
@@ -362,12 +434,17 @@ class _BodyTextState extends State<_BodyText> {
 // ------------------------------------------------------------------ 转发块
 
 class _RetweetBox extends StatelessWidget {
-  const _RetweetBox({required this.status});
+  const _RetweetBox({required this.status, this.showVideo = false});
 
   final StatusDto status;
 
+  /// 外层视频来自本转发块时，封面画在这里（见 `StatusCard.build` 注释）
+  final bool showVideo;
+
   @override
   Widget build(BuildContext context) {
+    final videoUrl = status.videoUrl;
+    final hasVideo = showVideo && videoUrl != null && videoUrl.isNotEmpty;
     return Container(
       padding: const EdgeInsets.all(8),
       decoration: BoxDecoration(
@@ -385,9 +462,15 @@ class _RetweetBox extends StatelessWidget {
           ),
           if (status.text.isNotEmpty) ...[
             const SizedBox(height: 2),
-            SelectableText(status.text, style: const TextStyle(fontSize: 14.5, height: 1.4)),
+            SelectableText(
+              status.text,
+              style: const TextStyle(fontSize: 14.5, height: 1.4),
+            ),
           ],
-          if (status.images.isNotEmpty) ...[
+          if (hasVideo) ...[
+            const SizedBox(height: 6),
+            _VideoBlock(status: status),
+          ] else if (status.images.isNotEmpty) ...[
             const SizedBox(height: 6),
             ImageGrid(urls: status.images, small: true),
           ],
@@ -413,7 +496,11 @@ class Avatar extends StatelessWidget {
         child: url.isEmpty
             ? Container(
                 color: Colors.grey.shade300,
-                child: Icon(Icons.person, size: size * 0.6, color: Colors.grey.shade600),
+                child: Icon(
+                  Icons.person,
+                  size: size * 0.6,
+                  color: Colors.grey.shade600,
+                ),
               )
             : CachedNetworkImage(
                 imageUrl: url,
@@ -421,7 +508,11 @@ class Avatar extends StatelessWidget {
                 placeholder: (_, _) => Container(color: Colors.grey.shade200),
                 errorWidget: (_, _, _) => Container(
                   color: Colors.grey.shade300,
-                  child: Icon(Icons.person, size: size * 0.6, color: Colors.grey.shade600),
+                  child: Icon(
+                    Icons.person,
+                    size: size * 0.6,
+                    color: Colors.grey.shade600,
+                  ),
                 ),
               ),
       ),

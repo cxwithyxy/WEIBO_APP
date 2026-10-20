@@ -242,6 +242,25 @@ class StatusDto {
   final bool isLongText;
   final UserDto? user;
 
+  /// 本条（含转发块回退）是否带视频。
+  final bool isVideo;
+
+  /// 视频直链（原样透传，**可能是 http://**）。
+  final String? videoUrl;
+
+  /// 视频封面（通常是 https 的 sinaimg）。
+  final String? videoCoverUrl;
+
+  /// 视频时长（秒）。
+  final PlatformInt64? videoDuration;
+
+  /// 本条视频是否**来自 `retweeted_status`**。
+  ///
+  /// UI 需要它来避免封面重复：`video_url` 在转发场景会回退到转发块，
+  /// 而转发块自身也会被序列化成一份 DTO、同样带视频字段。如果两层都画封面
+  /// 就会出现两张。约定：**外层为 true 时封面画在转发块里，否则画在卡片层。**
+  final bool videoFromRetweeted;
+
   /// 转发原微博（递归）
   final StatusDto? retweeted;
 
@@ -257,6 +276,11 @@ class StatusDto {
     required this.isAd,
     required this.isLongText,
     this.user,
+    required this.isVideo,
+    this.videoUrl,
+    this.videoCoverUrl,
+    this.videoDuration,
+    required this.videoFromRetweeted,
     this.retweeted,
   });
 
@@ -276,6 +300,11 @@ class StatusDto {
       isAd.hashCode ^
       isLongText.hashCode ^
       user.hashCode ^
+      isVideo.hashCode ^
+      videoUrl.hashCode ^
+      videoCoverUrl.hashCode ^
+      videoDuration.hashCode ^
+      videoFromRetweeted.hashCode ^
       retweeted.hashCode;
 
   @override
@@ -294,6 +323,11 @@ class StatusDto {
           isAd == other.isAd &&
           isLongText == other.isLongText &&
           user == other.user &&
+          isVideo == other.isVideo &&
+          videoUrl == other.videoUrl &&
+          videoCoverUrl == other.videoCoverUrl &&
+          videoDuration == other.videoDuration &&
+          videoFromRetweeted == other.videoFromRetweeted &&
           retweeted == other.retweeted;
 }
 

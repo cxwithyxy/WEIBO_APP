@@ -70,12 +70,38 @@ pub struct StatusDto {
     pub is_ad: bool,
     pub is_long_text: bool,
     pub user: Option<UserDto>,
+
+    // ---- 视频（对应 core 的 `Status::is_video` / `video_*` 一族）----
+    //
+    // 说明：core 的视频字段**已经做了转发块回退** —— 外层没有 `page_info`
+    // 视频时会取 `retweeted_status` 的。这里原样透传，UI 直接用即可。
+    /// 本条（含转发块回退）是否带视频。
+    pub is_video: bool,
+    /// 视频直链（原样透传，**可能是 http://**）。
+    pub video_url: Option<String>,
+    /// 视频封面（通常是 https 的 sinaimg）。
+    pub video_cover_url: Option<String>,
+    /// 视频时长（秒）。
+    pub video_duration: Option<i64>,
+    /// 本条视频是否**来自 `retweeted_status`**。
+    ///
+    /// UI 需要它来避免封面重复：`video_url` 在转发场景会回退到转发块，
+    /// 而转发块自身也会被序列化成一份 DTO、同样带视频字段。如果两层都画封面
+    /// 就会出现两张。约定：**外层为 true 时封面画在转发块里，否则画在卡片层。**
+    pub video_from_retweeted: bool,
+
     /// 转发原微博（递归）
     pub retweeted: Option<Box<StatusDto>>,
 }
 
 impl From<&Status> for StatusDto {
     fn from(s: &Status) -> Self {
+        // `video_url_with_source` 的 source 会带 `retweeted_status.` 前缀，
+        // 据此判断视频来自哪一层（复用 core 已有的公开 API，不重写判定逻辑）。
+        let (video_url, video_from_retweeted) = match s.video_url_with_source() {
+            Some((u, src)) => (Some(u), src.starts_with("retweeted_status.")),
+            None => (None, false),
+        };
         Self {
             id: s.idstr.clone().unwrap_or_default(),
             time: s.display_time(),
@@ -88,6 +114,11 @@ impl From<&Status> for StatusDto {
             is_ad: s.is_ad_flag(),
             is_long_text: s.is_long_text.unwrap_or(false),
             user: s.user.as_ref().map(UserDto::from),
+            is_video: s.is_video(),
+            video_url,
+            video_cover_url: s.video_cover_url(),
+            video_duration: s.video_duration(),
+            video_from_retweeted,
             retweeted: s
                 .retweeted_status
                 .as_ref()

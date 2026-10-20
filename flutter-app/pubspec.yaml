@@ -16,7 +16,7 @@ publish_to: 'none' # Remove this line if you wish to publish to pub.dev
 # https://developer.apple.com/library/archive/documentation/General/Reference/InfoPlistKeyReference/Articles/CoreFoundationKeys.html
 # In Windows, build-name is used as the major, minor, and patch parts
 # of the product and file versions while build-number is used as the build suffix.
-version: 1.0.0+1
+version: 1.0.12+10012
 
 environment:
   sdk: ^3.13.5
@@ -41,6 +41,9 @@ dependencies:
   cached_network_image: ^4.0.4
   shared_preferences: ^2.5.6
   flutter_cache_manager: ^3.4.5
+  # 视频播放（Android 走 Media3/ExoPlayer）。刻意不引 chewie 这类 UI 重封装 ——
+  # 本次只需要「全屏 + 播放/暂停 + 可拖进度条」，自己写能少一层依赖与体积。
+  video_player: ^2.11.1
 
 dev_dependencies:
   flutter_test:

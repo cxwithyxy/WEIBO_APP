@@ -2046,8 +2046,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   StatusDto dco_decode_status_dto(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
-    if (arr.length != 12)
-      throw Exception('unexpected arr length: expect 12 but see ${arr.length}');
+    if (arr.length != 17)
+      throw Exception('unexpected arr length: expect 17 but see ${arr.length}');
     return StatusDto(
       id: dco_decode_String(arr[0]),
       time: dco_decode_String(arr[1]),
@@ -2060,7 +2060,12 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       isAd: dco_decode_bool(arr[8]),
       isLongText: dco_decode_bool(arr[9]),
       user: dco_decode_opt_box_autoadd_user_dto(arr[10]),
-      retweeted: dco_decode_opt_box_status_dto(arr[11]),
+      isVideo: dco_decode_bool(arr[11]),
+      videoUrl: dco_decode_opt_String(arr[12]),
+      videoCoverUrl: dco_decode_opt_String(arr[13]),
+      videoDuration: dco_decode_opt_box_autoadd_i_64(arr[14]),
+      videoFromRetweeted: dco_decode_bool(arr[15]),
+      retweeted: dco_decode_opt_box_status_dto(arr[16]),
     );
   }
 
@@ -2501,6 +2506,11 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     var var_isAd = sse_decode_bool(deserializer);
     var var_isLongText = sse_decode_bool(deserializer);
     var var_user = sse_decode_opt_box_autoadd_user_dto(deserializer);
+    var var_isVideo = sse_decode_bool(deserializer);
+    var var_videoUrl = sse_decode_opt_String(deserializer);
+    var var_videoCoverUrl = sse_decode_opt_String(deserializer);
+    var var_videoDuration = sse_decode_opt_box_autoadd_i_64(deserializer);
+    var var_videoFromRetweeted = sse_decode_bool(deserializer);
     var var_retweeted = sse_decode_opt_box_status_dto(deserializer);
     return StatusDto(
       id: var_id,
@@ -2514,6 +2524,11 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       isAd: var_isAd,
       isLongText: var_isLongText,
       user: var_user,
+      isVideo: var_isVideo,
+      videoUrl: var_videoUrl,
+      videoCoverUrl: var_videoCoverUrl,
+      videoDuration: var_videoDuration,
+      videoFromRetweeted: var_videoFromRetweeted,
       retweeted: var_retweeted,
     );
   }
@@ -2928,6 +2943,11 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     sse_encode_bool(self.isAd, serializer);
     sse_encode_bool(self.isLongText, serializer);
     sse_encode_opt_box_autoadd_user_dto(self.user, serializer);
+    sse_encode_bool(self.isVideo, serializer);
+    sse_encode_opt_String(self.videoUrl, serializer);
+    sse_encode_opt_String(self.videoCoverUrl, serializer);
+    sse_encode_opt_box_autoadd_i_64(self.videoDuration, serializer);
+    sse_encode_bool(self.videoFromRetweeted, serializer);
     sse_encode_opt_box_status_dto(self.retweeted, serializer);
   }
 

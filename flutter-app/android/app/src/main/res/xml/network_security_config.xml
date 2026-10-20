@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  明文 HTTP 白名单（Android 9 / API 28+ 默认禁明文）。
+
+  背景：微博的视频直链是 **http://**（实测 `http://f.video.weibocdn.com/...`），
+  不做放行的话 ExoPlayer/Media3 初始化会直接失败
+  （logcat: `Cleartext HTTP traffic to f.video.weibocdn.com not permitted`）。
+
+  取舍：**不**用 `android:usesCleartextTraffic="true"` 全局放行（那等于对所有域
+  网开一面），只对视频 CDN 域开。这里用基础域 `weibocdn.com` + 子域，覆盖
+  `f.video.weibocdn.com`（直链）以及同类 `*.video.weibocdn.com`。
+  其余所有域仍然保持「禁明文」（base-config = false）—— 微博 ajax / 封面
+  sinaimg 本来就都是 https。
+
+  注意：该 CDN **拒绝 HEAD（403）**，但 GET/分段 GET 正常，属既有事实，
+  与明文配置无关。
+-->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="false" />
+    <domain-config cleartextTrafficPermitted="true">
+        <domain includeSubdomains="true">weibocdn.com</domain>
+    </domain-config>
+</network-security-config>
