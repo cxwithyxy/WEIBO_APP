@@ -8,10 +8,17 @@
 //!   读:        hot | band | timeline [n] | following [n] | meblog | user <uid>
 //!              followed | detail <mid> | comments <mid> [n] | reposts <mid>
 //!              search <关键词> | longtext <id> | mylatest
+//!              video <mid> | videos [n]
 //!   写（需 --yes）:
 //!              post <内容> [--private|--followers] | like|unlike <id>
 //!              repost <id> [文字] | comment <id> <文字> | fav <id> [--off]
 //!              delete <id>
+//!
+//! 视频（只读，无需 --yes）：
+//!   video <mid>      拉单条微博详情，打印 page_info 原文 + 解析出的类型/时长/封面/视频 URL
+//!   videos [n]       扫首页（失败退关注流）前 n 条，列出带视频的微博（默认 20）
+//!   两者都支持 `--json <文件>`：离线重放一份已保存的接口响应（video 传
+//!   `statuses/show` 原文，videos 传时间线原文），走与联网路径**完全相同**的解析代码。
 
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -42,6 +49,20 @@ fn free_text(args: &[String]) -> String {
         .cloned()
         .collect::<Vec<_>>()
         .join(" ")
+}
+
+/// 取 `--flag value` 形式选项的值
+fn arg_value(args: &[String], flag: &str) -> Option<String> {
+    args.iter()
+        .position(|a| a == flag)
+        .and_then(|i| args.get(i + 1))
+        .cloned()
+}
+
+/// 读一份本地保存的接口响应原文（配合 `--json` 离线重放）
+fn read_json_file(path: &str) -> Result<String, WeiboError> {
+    std::fs::read_to_string(path)
+        .map_err(|e| WeiboError::protocol(format!("读取 {path} 失败: {e}")))
 }
 
 /// 写操作确认闸门：真实账号会产生效果，必须显式 --yes
@@ -279,6 +300,162 @@ fn run_command(
             );
         }
 
+        // ------------------------------ 视频（只读） ------------------------------
+        "video" => {
+            // 参数：video <mid> [--json <文件>]。带 --json 时 mid 可省（用响应里的 idstr）。
+            let json_file = arg_value(args, "--json");
+            let mid_arg = args
+                .get(2)
+                .filter(|a| !a.starts_with("--"))
+                .cloned()
+                .unwrap_or_default();
+
+            let s = match &json_file {
+                Some(path) => client.parse_status_raw(read_json_file(path)?)?,
+                None => {
+                    if mid_arg.is_empty() {
+                        return Err(WeiboError::protocol("用法: video <mid> [--json <文件>]"));
+                    }
+                    client.status_detail(mid_arg.clone())?
+                }
+            };
+
+            let mid = s.idstr.clone().unwrap_or(mid_arg);
+            println!(
+                "作者 : {} ({})",
+                s.user.as_ref().and_then(|u| u.screen_name.clone()).unwrap_or_default(),
+                s.user.as_ref().and_then(|u| u.idstr.clone()).unwrap_or_default()
+            );
+            println!("mid  : {mid}");
+            println!("链接 : https://weibo.com/{mid}");
+            if let Some(rt) = s.retweeted_status.as_ref() {
+                println!(
+                    "转发自: {} ({})",
+                    rt.user.as_ref().and_then(|u| u.screen_name.clone()).unwrap_or_default(),
+                    rt.idstr.clone().unwrap_or_default()
+                );
+            }
+
+            println!("{}", "─".repeat(60));
+            println!("page_info 原始 JSON：");
+            match s.page_info.as_deref() {
+                Some(raw) => match serde_json::from_str::<serde_json::Value>(raw) {
+                    Ok(v) => println!(
+                        "{}",
+                        serde_json::to_string_pretty(&v).unwrap_or_else(|_| raw.to_string())
+                    ),
+                    Err(_) => println!("{raw}"),
+                },
+                None => println!("(本条没有 page_info)"),
+            }
+            if let Some(raw) = s.retweeted_status.as_ref().and_then(|rt| rt.page_info.as_deref()) {
+                println!("retweeted_status.page_info 原始 JSON：");
+                match serde_json::from_str::<serde_json::Value>(raw) {
+                    Ok(v) => println!(
+                        "{}",
+                        serde_json::to_string_pretty(&v).unwrap_or_else(|_| raw.to_string())
+                    ),
+                    Err(_) => println!("{raw}"),
+                }
+            }
+            println!("{}", "─".repeat(60));
+
+            // 类型化解析结果（本条；转发视频另打印）
+            match s.page_info_parsed() {
+                Some(pi) => println!(
+                    "card type={:?}  object_type={:?}  判定={}",
+                    pi.page_type,
+                    pi.object_type,
+                    if pi.is_video() { "视频" } else { "非视频/其它卡片" }
+                ),
+                None => println!("card : (page_info 无法解析或缺字段)"),
+            }
+            if let Some(rt) = s.retweeted_status.as_ref() {
+                if let Some(pi) = rt.page_info_parsed() {
+                    println!(
+                        "转发 card type={:?}  object_type={:?}  判定={}",
+                        pi.page_type,
+                        pi.object_type,
+                        if pi.is_video() { "视频" } else { "非视频/其它卡片" }
+                    );
+                }
+            }
+
+            println!(
+                "时长 : {}",
+                s.video_duration()
+                    .map(|d| format!("{d}s"))
+                    .unwrap_or_else(|| "(无)".into())
+            );
+            println!(
+                "封面 : {}",
+                s.video_cover_url().unwrap_or_else(|| "(无)".into())
+            );
+            match s.video_url_with_source() {
+                Some((u, src)) => {
+                    println!("视频 : {u}");
+                    println!("来源 : {src}");
+                }
+                None => println!("视频 : (未提取到视频 URL)"),
+            }
+        }
+
+        "videos" => {
+            // 参数：videos [n] [--json <文件>]
+            let json_file = arg_value(args, "--json");
+            let n: u32 = args
+                .get(2)
+                .filter(|a| !a.starts_with("--"))
+                .and_then(|s| s.parse().ok())
+                .unwrap_or(20);
+
+            let list: Vec<Status> = match &json_file {
+                // 离线重放：与联网路径共用 parse_timeline_raw
+                Some(path) => client.parse_timeline_raw(read_json_file(path)?),
+                None => {
+                    println!("扫描前 {n} 条…");
+                    // 首页时间线优先；该端点对访客/异常登录态可能不可用，退关注流。
+                    match client.home_timeline(n, "0".into()) {
+                        Ok(l) => l,
+                        Err(e) => {
+                            eprintln!("⚠ 首页时间线不可用（{e:?}），改试关注时间线…");
+                            client.following_timeline(n)?
+                        }
+                    }
+                }
+            };
+
+            println!("共 {} 条，以下是带视频的：\n", list.len());
+            let mut found = 0usize;
+            for s in &list {
+                let Some((u, src)) = s.video_url_with_source() else { continue };
+                found += 1;
+                let name = s
+                    .user
+                    .as_ref()
+                    .and_then(|u| u.screen_name.clone())
+                    .unwrap_or_else(|| "?".into());
+                println!(
+                    "{found}. mid={}  作者={name}  来源={src}",
+                    s.idstr.clone().unwrap_or_default()
+                );
+                println!("   URL : {u}");
+                if let Some(c) = s.video_cover_url() {
+                    println!("   封面: {c}");
+                }
+                if let Some(d) = s.video_duration() {
+                    println!("   时长: {d}s");
+                }
+                let t: String = s.plain_text().replace('\n', " ").chars().take(60).collect();
+                if !t.trim().is_empty() {
+                    println!("   文字: {t}");
+                }
+            }
+            if found == 0 {
+                println!("（{} 条里没有带视频的微博）", list.len());
+            }
+        }
+
         "comments" => {
             let mid = args.get(2).cloned().unwrap_or_default();
             if mid.is_empty() {
@@ -459,6 +636,7 @@ fn main() {
              \x20 meblog / user <uid> / followed\n\
              \x20 detail <mid> / comments <mid> [n] / reposts <mid>\n\
              \x20 search <关键词> / longtext <id> / mylatest\n\
+             \x20 video <mid> / videos [n]         （只读；均支持 --json <文件> 离线重放）\n\
              \x20 post <内容> [--private|--followers] [--yes]\n\
              \x20 like|unlike <id> / repost <id> [文字] / comment <id> <文字> / fav <id> [--off] / delete <id>\n\n\
              写操作需 --yes 确认"
@@ -486,8 +664,14 @@ fn main() {
 
     let logged_in = client.restore(cookie.to_string_lossy().to_string());
 
-    // 公开接口不需要登录态
-    let public = matches!(cmd, "hot" | "band");
+    // 公开接口不需要登录态：
+    //  - hot / band 本来就是公开榜；
+    //  - video 走 `statuses/show`，单条公开微博对访客也返回数据（实测）；
+    //  - videos --json 只是解析本地已保存的响应，不需要联网登录。
+    // 其余命令仍需登录；videos 联网扫流也仍要求登录。
+    let public = matches!(cmd, "hot" | "band")
+        || cmd == "video"
+        || (cmd == "videos" && args.iter().any(|a| a == "--json"));
     if !logged_in && !public {
         die("未登录，请先执行: weibo-cli login");
     }
