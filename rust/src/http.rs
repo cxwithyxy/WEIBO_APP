@@ -130,17 +130,34 @@ struct Inner {
 }
 
 impl Inner {
+    /// cookie 域是否匹配 host（`weibo.com` 与 `.weibo.com` 都匹配 weibo.com 及其子域）
+    fn domain_matches(cookie_domain: &str, host: &str) -> bool {
+        let d = cookie_domain.strip_prefix('.').unwrap_or(cookie_domain);
+        host == d || host.ends_with(&format!(".{d}"))
+    }
+
     /// 某 host 该带的 Cookie 头
     fn cookie_header(&self, host: &str) -> String {
         self.jar
             .iter()
-            .filter(|(k, _)| {
-                let d = k.domain.strip_prefix('.').unwrap_or(&k.domain);
-                host == d || host.ends_with(&format!(".{d}"))
-            })
+            .filter(|(k, _)| Self::domain_matches(&k.domain, host))
             .map(|(k, v)| format!("{}={}", k.name, v))
             .collect::<Vec<_>>()
             .join("; ")
+    }
+
+    /// 按名取**这次请求实际会带上**的第一个 cookie 值。
+    ///
+    /// 必须与 `cookie_header(host)` 共用同一套域匹配。CSRF 双提交要求
+    /// `X-XSRF-TOKEN` 头与 `Cookie` 里的 `XSRF-TOKEN` **逐字一致**：
+    /// 若只按名字取，罐里排在前面的是别的域（如 m.weibo.cn）的同名 cookie，
+    /// 头里就会发一个和 Cookie 里不同的令牌，服务端直接 403
+    /// `{"ok":0,"message":"invalid csrf token"}`（已实测复现）。
+    fn cookie_value_for_host(&self, host: &str, name: &str) -> Option<String> {
+        self.jar
+            .iter()
+            .find(|(k, _)| k.name == name && Self::domain_matches(&k.domain, host))
+            .map(|(_, v)| v.clone())
     }
 
     /// 已存在的键原地更新；新键追加到末尾（LinkedHashMap 语义）
@@ -325,7 +342,19 @@ impl WeiboHttp {
 
     /// 确保拿到 CSRF 令牌（写操作前补一次主页访问）
     pub fn ensure_xsrf(&self) -> Result<(), WeiboError> {
-        if self.cookie_value("XSRF-TOKEN".to_string()).is_some() {
+        // 只认**发给 weibo.com 时会真正带上**的那枚令牌。罐里可能有
+        // m.weibo.cn 等其它域的同名 cookie，不能算作「已有」。
+        let host = url::Url::parse(HOST_WEIBO)
+            .ok()
+            .and_then(|u| u.host_str().map(str::to_string))
+            .unwrap_or_else(|| "weibo.com".to_string());
+        let has_token = self
+            .inner
+            .lock()
+            .unwrap()
+            .cookie_value_for_host(&host, "XSRF-TOKEN")
+            .is_some();
+        if has_token {
             return Ok(());
         }
         // 失败不致命（对应 Kotlin 的 runCatching）
@@ -408,7 +437,8 @@ impl WeiboHttp {
             (
                 inner.ua.clone(),
                 inner.cookie_header(&host),
-                inner.cookie_value("XSRF-TOKEN"),
+                // 必须取「这次要发给该 host」的那枚，保证双提交一致（见 cookie_value_for_host）
+                inner.cookie_value_for_host(&host, "XSRF-TOKEN"),
             )
         };
 
@@ -734,6 +764,69 @@ mod tests {
         http.ensure_xsrf().unwrap();
         http.ensure_xsrf().unwrap(); // 已有则不重复请求
         assert_eq!(engine.requests().len(), 1, "已拿到令牌后不应再请求主页");
+    }
+
+    // ---- 6b. CSRF 头必须取「该 host 实际会发出的那枚令牌」 ----
+    //
+    // 回归：罐里同时有 m.weibo.cn 与 weibo.com 的 XSRF-TOKEN 时，
+    // 之前按名字取「第一个」，会给 weibo.com 的请求发 m.weibo.cn 的令牌，
+    // 与 Cookie 里 weibo.com 的令牌不一致 → 403 invalid csrf token。
+
+    #[test]
+    fn csrf_header_matches_host_scoped_cookie() {
+        let engine = ScriptedEngine::new(vec![
+            mk(
+                200,
+                vec![(
+                    "Set-Cookie",
+                    vec![
+                        "XSRF-TOKEN=mcn; domain=.m.weibo.cn; path=/",
+                        "XSRF-TOKEN=web; domain=.weibo.com; path=/",
+                    ],
+                )],
+                "ok",
+            ),
+            mk(200, vec![], "ok"),
+            mk(200, vec![], "ok"),
+        ]);
+        let http = WeiboHttp::new(engine.clone(), None);
+        http.get("https://weibo.com/".into(), None, false).unwrap();
+        http.post_form("https://weibo.com/ajax/x".into(), HashMap::new(), None, true)
+            .unwrap();
+        http.post_form("https://m.weibo.cn/api/y".into(), HashMap::new(), None, true)
+            .unwrap();
+
+        let reqs = engine.requests();
+        let hdr = |i: usize, name: &str| reqs[i].headers.get(name).cloned().unwrap_or_default();
+        // weibo.com：头与 Cookie 都必须是 weibo.com 的令牌
+        assert_eq!(hdr(1, "X-XSRF-TOKEN"), "web");
+        assert!(hdr(1, "Cookie").contains("XSRF-TOKEN=web"));
+        assert!(!hdr(1, "Cookie").contains("XSRF-TOKEN=mcn"));
+        // m.weibo.cn：用 m.weibo.cn 的令牌
+        assert_eq!(hdr(2, "X-XSRF-TOKEN"), "mcn");
+        assert!(hdr(2, "Cookie").contains("XSRF-TOKEN=mcn"));
+    }
+
+    #[test]
+    fn ensure_xsrf_ignores_other_domain_token() {
+        let engine = ScriptedEngine::new(vec![
+            mk(200, vec![("Set-Cookie", vec!["XSRF-TOKEN=mcn; domain=.m.weibo.cn; path=/"])], "m"),
+            mk(200, vec![("Set-Cookie", vec!["XSRF-TOKEN=web; domain=.weibo.com; path=/"])], "home"),
+            mk(200, vec![], "ok"),
+        ]);
+        let http = WeiboHttp::new(engine.clone(), None);
+        http.get("https://m.weibo.cn/".into(), None, false).unwrap();
+        http.ensure_xsrf().unwrap();
+        assert_eq!(
+            engine.requests().len(),
+            2,
+            "罐里只有其它域的令牌时，ensure_xsrf 必须补一次主页"
+        );
+        http.get("https://weibo.com/x".into(), None, false).unwrap();
+        assert_eq!(
+            engine.requests()[2].headers.get("X-XSRF-TOKEN").map(|s| s.as_str()),
+            Some("web")
+        );
     }
 
     // ---- 7. 重定向跳数上限 ----
