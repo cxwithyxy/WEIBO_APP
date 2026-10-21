@@ -65,6 +65,9 @@ pub struct StatusDto {
     pub reposts: i32,
     pub comments: i32,
     pub likes: i32,
+    /// 服务端记录的「当前用户是否已点赞」（core 的 `Status::is_liked`）。
+    /// UI 必须用它初始化点赞图标；否则冷启动/刷新后已点赞的微博会显示成灰色。
+    pub liked: bool,
     /// 展示用图片 URL（已选中等尺寸）
     pub images: Vec<String>,
     pub is_ad: bool,
@@ -110,6 +113,7 @@ impl From<&Status> for StatusDto {
             reposts: s.reposts_count.unwrap_or(0),
             comments: s.comments_count.unwrap_or(0),
             likes: s.attitudes_count.unwrap_or(0),
+            liked: s.is_liked(),
             images: s.image_urls(),
             is_ad: s.is_ad_flag(),
             is_long_text: s.is_long_text.unwrap_or(false),

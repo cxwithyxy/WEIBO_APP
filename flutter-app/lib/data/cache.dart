@@ -104,10 +104,21 @@ class StatusCache {
     }
   }
 
-  static Future<void> save(String id, String raw) async {
-    if (raw.isEmpty) return;
+  static Future<bool> save(String id, String raw) async {
+    if (raw.isEmpty) return false;
     try {
       await _atomicWrite(await _file(id), raw);
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /// 删掉某条微博的缓存。写操作后刷新失败时用它兜底：**绝不允许旧数据继续骗人**。
+  static Future<void> remove(String id) async {
+    try {
+      final f = await _file(id);
+      if (await f.exists()) await f.delete();
     } catch (_) {}
   }
 

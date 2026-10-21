@@ -2256,6 +2256,7 @@ impl SseDecode for crate::api::dto::StatusDto {
         let mut var_reposts = <i32>::sse_decode(deserializer);
         let mut var_comments = <i32>::sse_decode(deserializer);
         let mut var_likes = <i32>::sse_decode(deserializer);
+        let mut var_liked = <bool>::sse_decode(deserializer);
         let mut var_images = <Vec<String>>::sse_decode(deserializer);
         let mut var_isAd = <bool>::sse_decode(deserializer);
         let mut var_isLongText = <bool>::sse_decode(deserializer);
@@ -2274,6 +2275,7 @@ impl SseDecode for crate::api::dto::StatusDto {
             reposts: var_reposts,
             comments: var_comments,
             likes: var_likes,
+            liked: var_liked,
             images: var_images,
             is_ad: var_isAd,
             is_long_text: var_isLongText,
@@ -2641,6 +2643,7 @@ impl flutter_rust_bridge::IntoDart for crate::api::dto::StatusDto {
             self.reposts.into_into_dart().into_dart(),
             self.comments.into_into_dart().into_dart(),
             self.likes.into_into_dart().into_dart(),
+            self.liked.into_into_dart().into_dart(),
             self.images.into_into_dart().into_dart(),
             self.is_ad.into_into_dart().into_dart(),
             self.is_long_text.into_into_dart().into_dart(),
@@ -3051,6 +3054,7 @@ impl SseEncode for crate::api::dto::StatusDto {
         <i32>::sse_encode(self.reposts, serializer);
         <i32>::sse_encode(self.comments, serializer);
         <i32>::sse_encode(self.likes, serializer);
+        <bool>::sse_encode(self.liked, serializer);
         <Vec<String>>::sse_encode(self.images, serializer);
         <bool>::sse_encode(self.is_ad, serializer);
         <bool>::sse_encode(self.is_long_text, serializer);

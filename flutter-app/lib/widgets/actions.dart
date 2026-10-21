@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../src/rust/api/dto.dart';
 import '../src/rust/api/weibo.dart' as api;
+import '../data/status_write.dart';
 import 'common.dart';
 
 /// 转发弹层（内容可留空，留空时后端用「转发微博」占位）。
@@ -50,11 +51,16 @@ Future<bool> showRepostSheet(BuildContext context, StatusDto status) async {
                       : () async {
                           setSheet(() => busy = true);
                           try {
-                            await api.repost(
-                              id: status.id,
-                              text: ctrl.text,
-                              alsoComment: false,
-                              picId: '',
+                            // 写成功后刷新这条微博的本地缓存（reposts_count 会变）
+                            await mutateStatus(
+                              status.id,
+                              () => api.repost(
+                                id: status.id,
+                                text: ctrl.text,
+                                alsoComment: false,
+                                picId: '',
+                              ),
+                              expect: (s) => s.reposts > status.reposts,
                             );
                             if (ctx.mounted) Navigator.of(ctx).pop(true);
                           } catch (e) {
@@ -85,11 +91,13 @@ Future<bool> showRepostSheet(BuildContext context, StatusDto status) async {
 }
 
 /// 评论弹层。`replyToCid` 非空时为回复某条评论。
+/// `beforeComments` 传当前已知的评论数，用于写完刷新缓存时确认服务端已 +1。
 Future<bool> showCommentSheet(
   BuildContext context, {
   required String id,
   String subtitle = '',
   String? replyToCid,
+  int? beforeComments,
 }) async {
   final ctrl = TextEditingController();
   var busy = false;
@@ -140,12 +148,19 @@ Future<bool> showCommentSheet(
                           }
                           setSheet(() => busy = true);
                           try {
-                            await api.comment(
-                              id: id,
-                              text: text,
-                              replyToCid: replyToCid,
-                              alsoRepost: false,
-                              picId: '',
+                            // 写成功后刷新这条微博的本地缓存（comments_count 会变）
+                            await mutateStatus(
+                              id,
+                              () => api.comment(
+                                id: id,
+                                text: text,
+                                replyToCid: replyToCid,
+                                alsoRepost: false,
+                                picId: '',
+                              ),
+                              expect: beforeComments == null
+                                  ? null
+                                  : (s) => s.comments > beforeComments,
                             );
                             if (ctx.mounted) Navigator.of(ctx).pop(true);
                           } catch (e) {

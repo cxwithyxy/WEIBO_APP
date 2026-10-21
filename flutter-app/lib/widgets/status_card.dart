@@ -1,6 +1,8 @@
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 
+import '../data/attitude.dart';
+import '../data/status_write.dart';
 import '../src/rust/api/dto.dart';
 import '../src/rust/api/weibo.dart' as api;
 import '../pages/user_page.dart';
@@ -34,17 +36,58 @@ class StatusCard extends StatefulWidget {
 }
 
 class _StatusCardState extends State<StatusCard> {
-  bool _liked = false;
+  /// 服务端真值初始化（`attitudes_status`），不能写死 false。
+  late bool _liked = widget.status.liked;
   late int _likes = widget.status.likes;
   bool _busy = false;
 
   @override
+  void initState() {
+    super.initState();
+    AttitudeStore.instance.addListener(_onAttitudeChanged);
+    _adoptLocalAttitude();
+  }
+
+  @override
+  void dispose() {
+    AttitudeStore.instance.removeListener(_onAttitudeChanged);
+    super.dispose();
+  }
+
+  /// 本机写过就采用本机值（保证同一条微博在多个列表里一致）。
+  void _adoptLocalAttitude() {
+    final o = AttitudeStore.instance[widget.status.id];
+    if (o != null) {
+      _liked = o.liked;
+      _likes = o.likes;
+    }
+  }
+
+  void _onAttitudeChanged() {
+    if (!mounted || _busy) return;
+    final o = AttitudeStore.instance[widget.status.id];
+    if (o == null) return;
+    setState(() {
+      _liked = o.liked;
+      _likes = o.likes;
+    });
+  }
+
+  @override
   void didUpdateWidget(covariant StatusCard oldWidget) {
     super.didUpdateWidget(oldWidget);
-    // 列表刷新后，用服务端数据重置（但保留已点赞状态）
-    if (oldWidget.status.id != widget.status.id) {
+    final idChanged = oldWidget.status.id != widget.status.id;
+    // 服务端值变了（列表刷新/详情页重新拉取）就采纳它 —— 这才是真相。
+    // 只有「服务端值没变」时才保留本地乐观状态，避免无关 rebuild 把 +1 抹掉。
+    final serverChanged = oldWidget.status.likes != widget.status.likes ||
+        oldWidget.status.liked != widget.status.liked;
+    if (idChanged) {
       _likes = widget.status.likes;
-      _liked = false;
+      _liked = widget.status.liked;
+      _adoptLocalAttitude();
+    } else if (!_busy && serverChanged) {
+      _likes = widget.status.likes;
+      _liked = widget.status.liked;
     }
   }
 
@@ -57,11 +100,21 @@ class _StatusCardState extends State<StatusCard> {
       _likes += wantLike ? 1 : -1; // 乐观更新
     });
     try {
-      if (wantLike) {
-        await api.setLike(id: widget.status.id);
-      } else {
-        await api.cancelLike(id: widget.status.id);
-      }
+      // 统一入口：写成功后就地刷新这条微博的缓存（失败兜底在 mutateStatus 内部）
+      await mutateStatus(
+        widget.status.id,
+        () async {
+          if (wantLike) {
+            await api.setLike(id: widget.status.id);
+          } else {
+            await api.cancelLike(id: widget.status.id);
+          }
+        },
+        // 服务端必须已经变成目标点赞态，才算重拉到位（对抗读后写延迟）
+        expect: (s) => s.liked == wantLike,
+      );
+      // 服务端写成功 → 记进本机覆盖层，让同一条微博的其它副本（返回后的列表等）同步
+      AttitudeStore.instance.set(widget.status.id, liked: wantLike, likes: _likes);
       if (!mounted) return;
       ScaffoldMessenger.of(context)
         ..clearSnackBars()
@@ -92,6 +145,7 @@ class _StatusCardState extends State<StatusCard> {
     context,
     id: widget.status.id,
     subtitle: '评论 @${widget.status.user?.name ?? ''}',
+    beforeComments: widget.status.comments,
   );
 
   @override
@@ -172,13 +226,15 @@ class _StatusCardState extends State<StatusCard> {
   }
 
   Widget _metrics(StatusDto s) {
+    // 转发块（showActions=false）只读展示，但计数也走本机覆盖层，避免两处不一致
+    final likes = AttitudeStore.instance[s.id]?.likes ?? s.likes;
     return Row(
       children: [
         _metric(Icons.repeat, fmtCount(s.reposts)),
         const SizedBox(width: 20),
         _metric(Icons.chat_bubble_outline, fmtCount(s.comments)),
         const SizedBox(width: 20),
-        _metric(Icons.thumb_up_outlined, fmtCount(s.likes)),
+        _metric(Icons.thumb_up_outlined, fmtCount(likes)),
       ],
     );
   }

@@ -164,6 +164,10 @@ pub struct Status {
     pub comments_count: Option<i32>,
     #[serde(default, rename = "attitudes_count")]
     pub attitudes_count: Option<i32>,
+    /// 当前登录用户是否点过赞。微博的时间线与 `statuses/show` 都用这个字段
+    /// （`0`/`1`），与 `attitudes_count`（总赞数）是两回事。缺省视为未点赞。
+    #[serde(default, rename = "attitudes_status")]
+    pub attitudes_status: Option<i32>,
     #[serde(default)]
     pub source: Option<String>,
     #[serde(default)]
@@ -222,6 +226,14 @@ impl Status {
                 .unwrap_or_else(|_| s.eq_ignore_ascii_case("true")),
             _ => false,
         }
+    }
+
+    /// 当前登录用户是否已点赞（服务端真值，来自 `attitudes_status`）。
+    ///
+    /// UI 的点赞图标必须用它初始化，不能写死 false，否则冷启动后即使服务端
+    /// 已点赞也会显示成灰色（`statuses/show` 与时间线都返回这个字段）。
+    pub fn is_liked(&self) -> bool {
+        self.attitudes_status.map(|v| v > 0).unwrap_or(false)
     }
 
     /// 纯文本（优先 text_raw，其次剥离 HTML 标签）
@@ -1067,6 +1079,30 @@ mod video_tests {
         assert_eq!(s.video_url(), None);
         assert_eq!(s.video_cover_url(), None);
         assert_eq!(s.video_duration(), None);
+    }
+}
+
+#[cfg(test)]
+mod attitude_tests {
+    use super::Status;
+
+    fn parse(raw: &str) -> Status {
+        serde_json::from_str(raw).expect("fixture 应能被宽松解析")
+    }
+
+    /// `attitudes_status` 是「当前用户是否点赞」的服务端真值（0/1）。
+    #[test]
+    fn attitudes_status_drives_is_liked() {
+        assert!(parse(r#"{"idstr":"1","attitudes_status":1,"attitudes_count":9}"#).is_liked());
+        assert!(!parse(r#"{"idstr":"2","attitudes_status":0,"attitudes_count":9}"#).is_liked());
+    }
+
+    /// 字段缺失（未登录/访客）时按未点赞处理，不能 panic。
+    #[test]
+    fn missing_attitudes_status_is_not_liked() {
+        let s = parse(r#"{"idstr":"3","attitudes_count":5}"#);
+        assert_eq!(s.attitudes_status, None);
+        assert!(!s.is_liked());
     }
 }
 

@@ -5,6 +5,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'src/rust/api/weibo.dart' as api;
+import 'data/attitude.dart';
 
 /// 会话状态。
 ///
@@ -60,6 +61,8 @@ class Session extends ChangeNotifier {
   Future<void> onLoggedIn() async {
     final f = await _cookieFileHandle();
     await api.save(cookieFile: f.path);
+    // 新账号：丢掉上一条会话的点赞覆盖层，避免串号
+    AttitudeStore.instance.clear();
     _loggedIn = await api.isLoggedIn();
     _uid = await api.uid();
     notifyListeners();
@@ -75,6 +78,7 @@ class Session extends ChangeNotifier {
     if (await f.exists()) {
       await f.delete();
     }
+    AttitudeStore.instance.clear();
     _loggedIn = false;
     _uid = null;
     notifyListeners();

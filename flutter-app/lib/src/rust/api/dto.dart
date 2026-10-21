@@ -236,6 +236,10 @@ class StatusDto {
   final int comments;
   final int likes;
 
+  /// 服务端记录的「当前用户是否已点赞」（core 的 `Status::is_liked`）。
+  /// UI 必须用它初始化点赞图标；否则冷启动/刷新后已点赞的微博会显示成灰色。
+  final bool liked;
+
   /// 展示用图片 URL（已选中等尺寸）
   final List<String> images;
   final bool isAd;
@@ -272,6 +276,7 @@ class StatusDto {
     required this.reposts,
     required this.comments,
     required this.likes,
+    required this.liked,
     required this.images,
     required this.isAd,
     required this.isLongText,
@@ -296,6 +301,7 @@ class StatusDto {
       reposts.hashCode ^
       comments.hashCode ^
       likes.hashCode ^
+      liked.hashCode ^
       images.hashCode ^
       isAd.hashCode ^
       isLongText.hashCode ^
@@ -319,6 +325,7 @@ class StatusDto {
           reposts == other.reposts &&
           comments == other.comments &&
           likes == other.likes &&
+          liked == other.liked &&
           images == other.images &&
           isAd == other.isAd &&
           isLongText == other.isLongText &&

@@ -2046,8 +2046,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   StatusDto dco_decode_status_dto(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
-    if (arr.length != 17)
-      throw Exception('unexpected arr length: expect 17 but see ${arr.length}');
+    if (arr.length != 18)
+      throw Exception('unexpected arr length: expect 18 but see ${arr.length}');
     return StatusDto(
       id: dco_decode_String(arr[0]),
       time: dco_decode_String(arr[1]),
@@ -2056,16 +2056,17 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       reposts: dco_decode_i_32(arr[4]),
       comments: dco_decode_i_32(arr[5]),
       likes: dco_decode_i_32(arr[6]),
-      images: dco_decode_list_String(arr[7]),
-      isAd: dco_decode_bool(arr[8]),
-      isLongText: dco_decode_bool(arr[9]),
-      user: dco_decode_opt_box_autoadd_user_dto(arr[10]),
-      isVideo: dco_decode_bool(arr[11]),
-      videoUrl: dco_decode_opt_String(arr[12]),
-      videoCoverUrl: dco_decode_opt_String(arr[13]),
-      videoDuration: dco_decode_opt_box_autoadd_i_64(arr[14]),
-      videoFromRetweeted: dco_decode_bool(arr[15]),
-      retweeted: dco_decode_opt_box_status_dto(arr[16]),
+      liked: dco_decode_bool(arr[7]),
+      images: dco_decode_list_String(arr[8]),
+      isAd: dco_decode_bool(arr[9]),
+      isLongText: dco_decode_bool(arr[10]),
+      user: dco_decode_opt_box_autoadd_user_dto(arr[11]),
+      isVideo: dco_decode_bool(arr[12]),
+      videoUrl: dco_decode_opt_String(arr[13]),
+      videoCoverUrl: dco_decode_opt_String(arr[14]),
+      videoDuration: dco_decode_opt_box_autoadd_i_64(arr[15]),
+      videoFromRetweeted: dco_decode_bool(arr[16]),
+      retweeted: dco_decode_opt_box_status_dto(arr[17]),
     );
   }
 
@@ -2502,6 +2503,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     var var_reposts = sse_decode_i_32(deserializer);
     var var_comments = sse_decode_i_32(deserializer);
     var var_likes = sse_decode_i_32(deserializer);
+    var var_liked = sse_decode_bool(deserializer);
     var var_images = sse_decode_list_String(deserializer);
     var var_isAd = sse_decode_bool(deserializer);
     var var_isLongText = sse_decode_bool(deserializer);
@@ -2520,6 +2522,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       reposts: var_reposts,
       comments: var_comments,
       likes: var_likes,
+      liked: var_liked,
       images: var_images,
       isAd: var_isAd,
       isLongText: var_isLongText,
@@ -2939,6 +2942,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     sse_encode_i_32(self.reposts, serializer);
     sse_encode_i_32(self.comments, serializer);
     sse_encode_i_32(self.likes, serializer);
+    sse_encode_bool(self.liked, serializer);
     sse_encode_list_String(self.images, serializer);
     sse_encode_bool(self.isAd, serializer);
     sse_encode_bool(self.isLongText, serializer);
