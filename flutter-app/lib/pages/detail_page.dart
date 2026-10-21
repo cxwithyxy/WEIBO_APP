@@ -4,9 +4,14 @@ import '../data/cache.dart';
 import '../src/rust/api/dto.dart';
 import '../src/rust/api/weibo.dart' as api;
 import '../util/dedup.dart';
+import '../util/merge_first_page.dart';
 import '../widgets/actions.dart';
 import '../widgets/common.dart';
 import '../widgets/status_card.dart';
+
+/// 评论 / 转发 tab 静默刷新的「陈旧阈值」：距上次拉取超过它才后台刷新第一页，
+/// 避免来回切 tab 反复打请求。要调时间窗只改这一个常量。
+const Duration kDetailTabStaleAfter = Duration(seconds: 60);
 
 /// 微博详情页：**3 个 tab —— 正文 / 评论 / 转发**。
 ///
@@ -15,7 +20,10 @@ import '../widgets/status_card.dart';
 ///    早先用 NestedScrollView 把正文当 header、评论/转发当内层列表，
 ///    内外两层滚动 + 内层 RefreshIndicator 互相打架 →
 ///    「往下滑之后上不去、反而触发刷新」。
-///  - 详情页**不做下拉刷新**（用户要求）：正文不会变，评论/转发靠「滑到底自动加载更多」。
+///  - 正文 tab 不做下拉刷新（正文不会变）；评论 / 转发 tab 走
+///    **stale-while-revalidate**：切回已加载过的 tab 且距上次拉取超过
+///    [kDetailTabStaleAfter] 时后台静默刷新第一页（不转圈、不清空、不跳滚动），
+///    用户也可下拉主动刷新。合并语义见 `util/merge_first_page.dart`。
 class DetailPage extends StatefulWidget {
   const DetailPage({super.key, required this.mid});
 
@@ -35,14 +43,33 @@ class _DetailPageState extends State<DetailPage> with SingleTickerProviderStateM
   final _commentScroll = ScrollController();
   final _repostScroll = ScrollController();
 
+  /// 用来在切回 tab 时通知对应 tab「该静默刷新了」（tab 是懒加载 + keepAlive 的）
+  final _commentsKey = GlobalKey<_CommentsTabState>();
+  final _repostsKey = GlobalKey<_RepostsTabState>();
+
   @override
   void initState() {
     super.initState();
+    _tabs.addListener(_onTabChanged);
     _load();
+  }
+
+  /// 切到评论/转发 tab 时，让该 tab 按「陈旧阈值」决定要不要后台静默刷新。
+  void _onTabChanged() {
+    if (_tabs.indexIsChanging) return; // 等动画结束，避免半路触发
+    switch (_tabs.index) {
+      case 1:
+        _commentsKey.currentState?.maybeRefresh();
+        break;
+      case 2:
+        _repostsKey.currentState?.maybeRefresh();
+        break;
+    }
   }
 
   @override
   void dispose() {
+    _tabs.removeListener(_onTabChanged);
     _tabs.dispose();
     _bodyScroll.dispose();
     _commentScroll.dispose();
@@ -122,11 +149,16 @@ class _DetailPageState extends State<DetailPage> with SingleTickerProviderStateM
                   children: [
                     _BodyTab(status: s, controller: _bodyScroll),
                     _CommentsTab(
+                      key: _commentsKey,
                       mid: widget.mid,
                       initialTotal: s.comments,
                       controller: _commentScroll,
                     ),
-                    _RepostsTab(mid: widget.mid, controller: _repostScroll),
+                    _RepostsTab(
+                      key: _repostsKey,
+                      mid: widget.mid,
+                      controller: _repostScroll,
+                    ),
                   ],
                 ),
     );
@@ -166,6 +198,7 @@ class _BodyTab extends StatelessWidget {
 
 class _CommentsTab extends StatefulWidget {
   const _CommentsTab({
+    super.key,
     required this.mid,
     required this.initialTotal,
     this.controller,
@@ -191,6 +224,9 @@ class _CommentsTabState extends State<_CommentsTab> with AutomaticKeepAliveClien
   bool _loading = false;
   bool _hasMore = true;
   Object? _error;
+
+  /// 上次「拉第一页」的时间：切回 tab 时按 [kDetailTabStaleAfter] 判断要不要静默刷新。
+  DateTime? _lastFetchedAt;
 
   @override
   bool get wantKeepAlive => true;
@@ -233,11 +269,58 @@ class _CommentsTabState extends State<_CommentsTab> with AutomaticKeepAliveClien
         _maxId = p64Int(p.nextMaxId);
         _total = p.total;
         _hasMore = p.comments.length >= 20;
+        _lastFetchedAt = DateTime.now();
       });
     } catch (e) {
       if (mounted) setState(() => _error = e);
     } finally {
       if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  /// 切回本 tab 时由详情页调用：只有距上次拉第一页超过 [kDetailTabStaleAfter]
+  /// 才后台静默刷新；窗口内直接跳过（避免来回切狂打请求）。
+  void maybeRefresh() {
+    if (!mounted || _loading) return;
+    final last = _lastFetchedAt;
+    final age = last == null ? null : DateTime.now().difference(last);
+    if (age != null && age < kDetailTabStaleAfter) {
+      debugPrint('[tab-swr] 评论：窗口内跳过（${age.inSeconds}s < ${kDetailTabStaleAfter.inSeconds}s）');
+      return;
+    }
+    debugPrint('[tab-swr] 评论：静默刷新第一页');
+    _refreshFirstPage(silent: true);
+  }
+
+  /// 重拉第一页并**合并**进已有列表：不清空、不转圈、不跳滚动。
+  ///
+  /// 分页状态（`_maxId` / `_hasMore`）**保持不变** —— 用户可能已经翻到后面几页，
+  /// 刷新第一页不能把游标往回退；后续页靠 [_more] 继续翻。
+  Future<void> _refreshFirstPage({required bool silent}) async {
+    try {
+      final p = await api.commentsPage(mid: widget.mid, count: 20, maxId: 0, flow: 1);
+      if (!mounted) return;
+      // 必须在 clear() 之前算好合并结果（级联会先 clear 再求值 addAll 的参数）
+      final merged = mergeFirstPage(existing: _items, fresh: p.comments, idOf: (c) => c.id);
+      setState(() {
+        _items
+          ..clear()
+          ..addAll(merged);
+        _seen
+          ..clear()
+          ..addAll(_items.where((c) => c.id.isNotEmpty).map((c) => c.id));
+        _total = p.total ?? _total;
+        _error = null;
+        _lastFetchedAt = DateTime.now();
+      });
+      debugPrint('[tab-swr] 评论：合并完成，共 ${_items.length} 条');
+    } catch (e) {
+      if (silent) return; // 静默失败：保留旧数据，不清空
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+          ..clearSnackBars()
+          ..showSnackBar(SnackBar(content: Text('刷新失败：${describeError(e)}')));
+      }
     }
   }
 
@@ -289,9 +372,14 @@ class _CommentsTabState extends State<_CommentsTab> with AutomaticKeepAliveClien
   }
 
   Future<void> _compose() async {
-    final ok = await showCommentSheet(context, id: widget.mid);
-    // 发完重拉第一页：按时间排序（flow=1）时新评论应该出现在最前面
-    if (mounted && ok) _load();
+    final ok = await showCommentSheet(
+      context,
+      id: widget.mid,
+      beforeComments: widget.initialTotal,
+    );
+    // 发完合并第一页：按时间排序（flow=1）时新评论会出现在最前面；
+    // 用合并而不是 _load()，避免把已经翻到的后续页清掉。
+    if (mounted && ok) _refreshFirstPage(silent: true);
   }
 
   Widget _list() {
@@ -300,33 +388,41 @@ class _CommentsTabState extends State<_CommentsTab> with AutomaticKeepAliveClien
     if (_items.isEmpty) {
       return const EmptyView(text: '还没有评论', icon: Icons.chat_bubble_outline);
     }
-    return ListView.separated(
-      controller: _scroll,
-      physics: const AlwaysScrollableScrollPhysics(),
-      itemCount: _items.length + 1,
-      separatorBuilder: (_, _) => const Divider(height: 1),
-      itemBuilder: (context, i) {
-        if (i == 0) {
-          return Padding(
-            padding: const EdgeInsets.fromLTRB(12, 10, 12, 6),
-            child: Text(
-              '评论 ${_total ?? widget.initialTotal}',
-              style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
+    return RefreshIndicator(
+      onRefresh: () => _refreshFirstPage(silent: false),
+      child: ListView.separated(
+        controller: _scroll,
+        physics: const AlwaysScrollableScrollPhysics(),
+        // +2：第 0 项是「评论 N」标题，最后一项是 footer，中间才是 N 条评论。
+        // 原来写 +1 时最后一条评论会被 footer 顶掉（只有 1 条评论时整条都不显示）。
+        itemCount: _items.length + 2,
+        separatorBuilder: (_, _) => const Divider(height: 1),
+        itemBuilder: (context, i) {
+          if (i == 0) {
+            return Padding(
+              padding: const EdgeInsets.fromLTRB(12, 10, 12, 6),
+              child: Text(
+                '评论 ${_total ?? widget.initialTotal}',
+                style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
+              ),
+            );
+          }
+          if (i == _items.length + 1) {
+            return FooterHint(loading: _loading, hasMore: _hasMore);
+          }
+          final c = _items[i - 1];
+          return _CommentTile(
+            comment: c,
+            onReply: () => showCommentSheet(
+              context,
+              id: widget.mid,
+              subtitle: '回复 @${c.user?.name ?? ''}：${c.text}',
+              replyToCid: c.id,
+              beforeComments: widget.initialTotal,
             ),
           );
-        }
-        if (i == _items.length) return FooterHint(loading: _loading, hasMore: _hasMore);
-        final c = _items[i - 1];
-        return _CommentTile(
-          comment: c,
-          onReply: () => showCommentSheet(
-            context,
-            id: widget.mid,
-            subtitle: '回复 @${c.user?.name ?? ''}：${c.text}',
-            replyToCid: c.id,
-          ),
-        );
-      },
+        },
+      ),
     );
   }
 }
@@ -429,7 +525,7 @@ class _CommentTile extends StatelessWidget {
 // ------------------------------------------------------------------ 转发
 
 class _RepostsTab extends StatefulWidget {
-  const _RepostsTab({required this.mid, this.controller});
+  const _RepostsTab({super.key, required this.mid, this.controller});
 
   final String mid;
   final ScrollController? controller;
@@ -449,6 +545,9 @@ class _RepostsTabState extends State<_RepostsTab> with AutomaticKeepAliveClientM
   bool _loading = false;
   bool _hasMore = true;
   Object? _error;
+
+  /// 上次「拉第一页」的时间：切回 tab 时按 [kDetailTabStaleAfter] 判断要不要静默刷新。
+  DateTime? _lastFetchedAt;
 
   @override
   bool get wantKeepAlive => true;
@@ -489,11 +588,52 @@ class _RepostsTabState extends State<_RepostsTab> with AutomaticKeepAliveClientM
           ..addAll(fresh.map((s) => s.id));
         _page = 2;
         _hasMore = list.length >= 20;
+        _lastFetchedAt = DateTime.now();
       });
     } catch (e) {
       if (mounted) setState(() => _error = e);
     } finally {
       if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  /// 切回本 tab 时由详情页调用（见评论 tab 的同名方法）。
+  void maybeRefresh() {
+    if (!mounted || _loading) return;
+    final last = _lastFetchedAt;
+    final age = last == null ? null : DateTime.now().difference(last);
+    if (age != null && age < kDetailTabStaleAfter) {
+      debugPrint('[tab-swr] 转发：窗口内跳过（${age.inSeconds}s < ${kDetailTabStaleAfter.inSeconds}s）');
+      return;
+    }
+    debugPrint('[tab-swr] 转发：静默刷新第一页');
+    _refreshFirstPage(silent: true);
+  }
+
+  /// 重拉第一页并合并；分页状态（`_page` / `_hasMore`）保持不变，后续页继续可翻。
+  Future<void> _refreshFirstPage({required bool silent}) async {
+    try {
+      final list = await api.reposts(mid: widget.mid, page: 1);
+      if (!mounted) return;
+      final merged = mergeFirstPage(existing: _items, fresh: list, idOf: (s) => s.id);
+      setState(() {
+        _items
+          ..clear()
+          ..addAll(merged);
+        _seen
+          ..clear()
+          ..addAll(_items.where((s) => s.id.isNotEmpty).map((s) => s.id));
+        _error = null;
+        _lastFetchedAt = DateTime.now();
+      });
+      debugPrint('[tab-swr] 转发：合并完成，共 ${_items.length} 条');
+    } catch (e) {
+      if (silent) return;
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+          ..clearSnackBars()
+          ..showSnackBar(SnackBar(content: Text('刷新失败：${describeError(e)}')));
+      }
     }
   }
 
@@ -525,15 +665,18 @@ class _RepostsTabState extends State<_RepostsTab> with AutomaticKeepAliveClientM
     if (_items.isEmpty) {
       return const EmptyView(text: '还没有转发', icon: Icons.repeat);
     }
-    return ListView.separated(
-      controller: _scroll,
-      physics: const AlwaysScrollableScrollPhysics(),
-      itemCount: _items.length + 1,
-      separatorBuilder: (_, _) => const Divider(height: 1),
-      itemBuilder: (context, i) {
-        if (i == _items.length) return FooterHint(loading: _loading, hasMore: _hasMore);
-        return StatusCard(status: _items[i], showActions: false);
-      },
+    return RefreshIndicator(
+      onRefresh: () => _refreshFirstPage(silent: false),
+      child: ListView.separated(
+        controller: _scroll,
+        physics: const AlwaysScrollableScrollPhysics(),
+        itemCount: _items.length + 1,
+        separatorBuilder: (_, _) => const Divider(height: 1),
+        itemBuilder: (context, i) {
+          if (i == _items.length) return FooterHint(loading: _loading, hasMore: _hasMore);
+          return StatusCard(status: _items[i], showActions: false);
+        },
+      ),
     );
   }
 }
