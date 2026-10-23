@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../data/cache.dart';
 import '../data/video_cache.dart';
 import '../session.dart';
+import '../util/backfill_setting.dart';
 
 /// 设置页（入口在「我的」页）。
 ///
@@ -99,6 +100,62 @@ class _SettingsPageState extends State<SettingsPage> {
     return u.label;
   }
 
+  /// 点「每次刷新最多补拉页数」→ 滑杆对话框。
+  ///
+  /// 确定才落盘；取消 / 点外部返回 null → 什么都不做。
+  Future<void> _pickMaxBackfillPages() async {
+    final s = Settings.instance;
+    // 对话框内的临时值：拖动只改它，不碰 Settings
+    var draft = clampMaxBackfillPages(s.maxBackfillPages);
+    final picked = await showDialog<int>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialogState) => AlertDialog(
+          title: const Text('每次刷新最多补拉页数'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                backfillPagesLabel(draft),
+                style: Theme.of(ctx).textTheme.titleMedium,
+              ),
+              Slider(
+                min: kMinMaxBackfillPages.toDouble(),
+                max: kMaxMaxBackfillPages.toDouble(),
+                // 步长 5：(120-5)/5 = 23 段
+                divisions:
+                    (kMaxMaxBackfillPages - kMinMaxBackfillPages) ~/ 5,
+                value: draft.toDouble(),
+                label: backfillPagesLabel(draft),
+                onChanged: (v) => setDialogState(
+                  () => draft = clampMaxBackfillPages(v.round()),
+                ),
+              ),
+              Text(
+                '下拉刷新时，最多往后翻多少页去补上和旧缓存之间的断档。\n'
+                '调大能补更久以前的内容，但一次刷新会更慢（每页约 26 分钟内容）。',
+                style: Theme.of(ctx).textTheme.bodySmall,
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(),
+              child: const Text('取消'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(draft),
+              child: const Text('确定'),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (picked == null || !mounted) return;
+    await Settings.instance.setMaxBackfillPages(picked);
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -116,6 +173,12 @@ class _SettingsPageState extends State<SettingsPage> {
                 subtitle: const Text('信息流里不显示推广微博'),
                 value: s.hideAds,
                 onChanged: s.setHideAds,
+              ),
+              ListTile(
+                leading: const Icon(Icons.download_for_offline_outlined),
+                title: const Text('每次刷新最多补拉页数'),
+                subtitle: Text(backfillPagesLabel(s.maxBackfillPages)),
+                onTap: _pickMaxBackfillPages,
               ),
               const Divider(height: 24),
               _section(context, '缓存'),

@@ -101,8 +101,7 @@ class _TimelinePageState extends State<TimelinePage>
   /// 上次刷新补拉是否**被上限截断**（`BackfillStop.capReached`）。
   ///
   /// 用途：触到上限说明「中间可能还缺一截」，不能静默当成功。
-  /// 现在只在 `debugPrint` 里留信号；UI 提示待定。
-  // TODO(cx): 若确认需要，可在 `FooterHint` 或顶部提示条上体现「本次刷新未补完」。
+  /// `refresh()` 命中时置 true、并弹一次 SnackBar（提示可去设置调大）+ debugPrint。
   bool _backfillHitCap = false;
 
   @override
@@ -323,6 +322,8 @@ class _TimelinePageState extends State<TimelinePage>
       final newestKnownTime = _items.first.time; // 旧内容最新时间（兜底判据）
       final oldItems = List<StatusDto>.of(_items);
       final oldPages = List<String>.of(_pages); // 页顺序与 oldItems 一致
+      // 每次刷新现读设置：改完设置无需重启 App。clamp 已在 Settings 侧做过。
+      final maxBackfill = Settings.instance.maxBackfillPages;
 
       // 本次刷新抓到的页（新 → 旧），第一页先进去，之后逐页追加。
       final fetchedPages = <List<StatusDto>>[p.statuses];
@@ -371,13 +372,14 @@ class _TimelinePageState extends State<TimelinePage>
           ? _cursorAdvanced(cursor, '')
           : p.statuses.length >= _pageCount;
 
-      // 退出原因：区分「真接上旧内容」和「被 60 页上限截断」——后者必须留信号。
+      // 退出原因：区分「真接上旧内容」和「被页数上限截断」——后者必须留信号。
       BackfillStop? why = continuable
           ? backfillStopReason(
               knownIds: knownIds,
               newestKnownTime: newestKnownTime,
               page: currentPage,
               pagesFetched: pagesFetched,
+              maxPages: maxBackfill,
               isFirstPage: currentIsFirst,
             )
           : BackfillStop.cursorEnd;
@@ -433,21 +435,34 @@ class _TimelinePageState extends State<TimelinePage>
           newestKnownTime: newestKnownTime,
           page: currentPage,
           pagesFetched: pagesFetched,
+          maxPages: maxBackfill,
           isFirstPage: currentIsFirst,
         );
       }
 
-      // 触到上限 = 中间可能还缺一截，**不能静默当成功**。
-      // 现在先把信号留在 state + 日志里；UI 提示待定（见 `_backfillHitCap`）。
+      // 触到上限 = 中间可能还缺一截，**不能静默当成功**：日志留证据 + 用户可见提示。
       _backfillHitCap = why == BackfillStop.capReached;
       if (_backfillHitCap) {
+        final fetchedTotal = pagesFetched + 1; // 第一页也算
+        final oldestCovered =
+            currentPage.isEmpty ? '?' : currentPage.last.time;
         debugPrint(
-          '[timeline] 补拉触到上限（$kMaxBackfillPages 页 / 本轮共抓 '
-          '${pagesFetched + 1} 页），本次最旧只覆盖到 '
-          '${currentPage.isEmpty ? '?' : currentPage.last.time}，'
+          '[timeline] 补拉触到上限（设置 $maxBackfill 页 / 本轮共抓 '
+          '$fetchedTotal 页），本次最旧只覆盖到 $oldestCovered，'
           '旧内容最新是 $newestKnownTime —— 中间可能仍有断档，'
           '且下次刷新不会自动接着补',
         );
+        // 一次刷新只弹一次（就在循环外，不会重复）
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                '本次刷新补到上限（$maxBackfill 页）仍未接上更早的内容，'
+                '中间可能有缺口；可在设置里调大「每次刷新最多补拉页数」',
+              ),
+            ),
+          );
+        }
       }
 
       // `following` 按**页码**翻页；刷新后服务端页号已因新内容插入而整体错位。

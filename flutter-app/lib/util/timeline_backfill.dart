@@ -9,6 +9,9 @@ import '../src/rust/api/dto.dart';
 /// 取 60 页：60 × 24min ≈ **24h**（≈1500 条），给「隔一天没开 App」留量；
 /// 同时仍是硬上限，防止服务端异常时无限拉。代价是页间必须限速（见
 /// [kBackfillPageDelay]），否则 60 个 GET 连打容易触发风控。
+///
+/// ⚠️ 这只是**库默认值**（tests / 未传参的调用方）。App 实际用的是用户设置
+/// `Settings.maxBackfillPages`（默认 30，范围 5..120），由 `refresh()` 每次现读传入。
 const int kMaxBackfillPages = 60;
 
 /// 补拉时每页之间的限速延时。

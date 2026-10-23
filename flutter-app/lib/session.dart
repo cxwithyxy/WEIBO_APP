@@ -6,6 +6,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'src/rust/api/weibo.dart' as api;
 import 'data/attitude.dart';
+import 'util/backfill_setting.dart';
 
 /// 会话状态。
 ///
@@ -92,6 +93,7 @@ class Settings extends ChangeNotifier {
 
   static const _kTheme = 'theme_mode';
   static const _kHideAds = 'hide_ads';
+  static const _kMaxBackfillPages = 'max_backfill_pages';
 
   ThemeMode _themeMode = ThemeMode.system;
   ThemeMode get themeMode => _themeMode;
@@ -99,6 +101,12 @@ class Settings extends ChangeNotifier {
   /// 关闭广告：信息流里不显示推广微博（对应原 Compose 版的 `hideAds` 过滤项）
   bool _hideAds = false;
   bool get hideAds => _hideAds;
+
+  /// 下拉刷新时最多往后补拉多少页（设置页可调）。
+  ///
+  /// 读取一律经 [clampMaxBackfillPages]，脏数据/手改配置不会把它变成 0 或无限。
+  int _maxBackfillPages = kDefaultMaxBackfillPages;
+  int get maxBackfillPages => _maxBackfillPages;
 
   Future<void> load() async {
     final sp = await SharedPreferences.getInstance();
@@ -109,6 +117,9 @@ class Settings extends ChangeNotifier {
       _ => ThemeMode.system,
     };
     _hideAds = sp.getBool(_kHideAds) ?? false;
+    _maxBackfillPages = clampMaxBackfillPages(
+      sp.getInt(_kMaxBackfillPages) ?? kDefaultMaxBackfillPages,
+    );
     notifyListeners();
   }
 
@@ -129,5 +140,14 @@ class Settings extends ChangeNotifier {
     notifyListeners();
     final sp = await SharedPreferences.getInstance();
     await sp.setBool(_kHideAds, v);
+  }
+
+  Future<void> setMaxBackfillPages(int v) async {
+    // 落盘前也 clamp：调用方传了越界值（测试/手改）也不会破坏不变式
+    _maxBackfillPages = clampMaxBackfillPages(v);
+    // 先 notify 让界面立即响应，再落盘（与 setHideAds 一致）
+    notifyListeners();
+    final sp = await SharedPreferences.getInstance();
+    await sp.setInt(_kMaxBackfillPages, _maxBackfillPages);
   }
 }
