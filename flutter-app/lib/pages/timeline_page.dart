@@ -9,6 +9,7 @@ import '../src/rust/api/dto.dart';
 import '../src/rust/api/weibo.dart' as api;
 import '../util/dedup.dart';
 import '../util/marker_place.dart';
+import '../util/timeline_backfill.dart';
 import '../widgets/common.dart';
 import '../widgets/status_card.dart';
 import 'detail_page.dart';
@@ -82,6 +83,9 @@ class _TimelinePageState extends State<TimelinePage>
 
   /// 「你上次刷到这里」那条标记条的大致高度 —— 判断「完整可见」时留的余量
   static const _markerBarHeight = 48.0;
+
+  /// 每页条数（刷新补拉、翻页都必须一致，否则「本页是否满页」判不准）
+  static const _pageCount = 20;
   late final ScrollController _scroll = widget.controller ?? ScrollController();
   bool get _ownsScroll => widget.controller == null;
 
@@ -93,6 +97,13 @@ class _TimelinePageState extends State<TimelinePage>
   bool _loading = false;
   bool _hasMore = true;
   Object? _error;
+
+  /// 上次刷新补拉是否**被上限截断**（`BackfillStop.capReached`）。
+  ///
+  /// 用途：触到上限说明「中间可能还缺一截」，不能静默当成功。
+  /// 现在只在 `debugPrint` 里留信号；UI 提示待定。
+  // TODO(cx): 若确认需要，可在 `FooterHint` 或顶部提示条上体现「本次刷新未补完」。
+  bool _backfillHitCap = false;
 
   @override
   bool get wantKeepAlive => true;
@@ -200,8 +211,9 @@ class _TimelinePageState extends State<TimelinePage>
         ..clear()
         ..addAll(snap.pages);
       _cursor = snap.cursor ?? '';
-      // 缓存里已经有 N 页，页码从 N+1 继续
-      _page = snap.pages.length + 1;
+      // 页码优先用落盘时记下的真实值；老缓存没这个字段才回退按页数推
+      // （刷新后 `_pages` 里新页与旧页有重叠，按页数推会高估 → `_more()` 跳页）。
+      _page = snap.page ?? (snap.pages.length + 1);
       _hasMore = true;
     });
     return true;
@@ -234,14 +246,22 @@ class _TimelinePageState extends State<TimelinePage>
     _deepestId ??= vis.first.id;
   }
 
-  Future<void> _persist() =>
-      FeedCache.save(_feedKey, FeedSnapshot(pages: List.of(_pages), cursor: _cursor));
+  Future<void> _persist() => FeedCache.save(
+        _feedKey,
+        FeedSnapshot(pages: List.of(_pages), cursor: _cursor, page: _page),
+      );
 
   Future<TimelineRawDto> _fetchRaw({required bool first}) {
     if (widget.kind == TimelineKind.home) {
-      return api.homeTimelinePageRaw(sinceId: first ? '' : _cursor, count: 20);
+      return api.homeTimelinePageRaw(
+        sinceId: first ? '' : _cursor,
+        count: _pageCount,
+      );
     }
-    return api.followingTimelinePageRaw(page: first ? 1 : _page, count: 20);
+    return api.followingTimelinePageRaw(
+      page: first ? 1 : _page,
+      count: _pageCount,
+    );
   }
 
   /// 首页流的游标还能继续翻吗？
@@ -251,11 +271,23 @@ class _TimelinePageState extends State<TimelinePage>
   bool _cursorAdvanced(String next, String prev) =>
       widget.kind != TimelineKind.home || (next.isNotEmpty && next != prev);
 
+  /// 下拉刷新。
+  ///
+  /// **首次（列表为空）**：整页铺开。
+  ///
+  /// **已有旧内容**：第一页照旧并入顶部，然后**持续往更旧方向补拉**，直到
+  /// 真正接上缓存里保留的旧内容为止 —— 修 cx 报的「8:00 到 12:00 凭空消失」。
+  /// 原来只拉一页：一页 20 条只覆盖最新几小时，中间的断层从来没人去拉。
+  ///
+  /// 补拉用**独立的本地游标**（`home` 从第一页的 nextCursor 起、`following`
+  /// 本地页码从 2 起），**绝不碰** `_cursor` / `_hasMore` —— 那是用户
+  /// 「继续往下翻更旧内容」的位置，刷新不该把它搞乱（`_page` 见文末说明）。
   Future<void> refresh() async {
     if (_loading) return;
     setState(() {
       _loading = true;
       _error = null;
+      _backfillHitCap = false; // 每轮刷新重置「被上限截断」信号
     });
     try {
       final p = await _fetchRaw(first: true);
@@ -263,9 +295,10 @@ class _TimelinePageState extends State<TimelinePage>
       // 同一页内部也可能重复（置顶 + 原条目），先按 id 去重
       final fresh = dedupById(p.statuses, (s) => s.id);
       final cursor = p.nextCursor ?? '';
-      setState(() {
-        if (_items.isEmpty) {
-          // 首次：整页铺开
+
+      if (_items.isEmpty) {
+        // 首次：整页铺开，**不补拉**（空列表没有「旧内容」可接）
+        setState(() {
           _items
             ..clear()
             ..addAll(fresh);
@@ -276,27 +309,157 @@ class _TimelinePageState extends State<TimelinePage>
           if (p.raw.isNotEmpty) _pages.add(p.raw);
           _cursor = cursor;
           _page = 2;
-          _hasMore = p.statuses.length >= 20 && _cursorAdvanced(cursor, '');
+          _hasMore = p.statuses.length >= _pageCount &&
+              _cursorAdvanced(cursor, '');
+          _ensureMarkerAnchor();
+        });
+        await _persist();
+        return;
+      }
+
+      // `_items` 非空 → 第一页 + 持续补拉到接上旧内容。
+      // 进循环前把「旧内容」整个快照下来，循环中不再变；补拉只看快照。
+      final knownIds = Set<String>.of(_seen); // 旧内容 id 快照（停止判据用）
+      final newestKnownTime = _items.first.time; // 旧内容最新时间（兜底判据）
+      final oldItems = List<StatusDto>.of(_items);
+      final oldPages = List<String>.of(_pages); // 页顺序与 oldItems 一致
+
+      // 本次刷新抓到的页（新 → 旧），第一页先进去，之后逐页追加。
+      final fetchedPages = <List<StatusDto>>[p.statuses];
+      final fetchedRaws = <String>[];
+      if (p.raw.isNotEmpty) fetchedRaws.add(p.raw);
+
+      // 每页到手就重排 + setState，内容逐页出现，不卡滚动。
+      // 顺序 = fetchedPages[0] + [1] + ... + oldItems（见 mergeBackfillPages），
+      // 所以第 2、3 页一定排在旧内容之前、第 1 页之后。
+      void render() {
+        if (!mounted) return;
+        final merged = mergeBackfillPages<StatusDto>(
+          existing: oldItems,
+          fetchedNewestFirst: fetchedPages,
+          idOf: (s) => s.id,
+        );
+        setState(() {
+          _items
+            ..clear()
+            ..addAll(merged);
+          // 旧快照 ∪ 合并结果：既不丢旧 id，又把新页 id 收进来给 _more 去重
+          _seen
+            ..clear()
+            ..addAll(knownIds)
+            ..addAll(merged.map((s) => s.id));
+          // `_pages` 原始页顺序必须与 `_items` 完全一致：新页在前、旧页在后，
+          // 否则重开时按顺序解析 + 去重会还原出错误顺序。
+          _pages
+            ..clear()
+            ..addAll(fetchedRaws)
+            ..addAll(oldPages);
+          _ensureMarkerAnchor();
+        });
+      }
+
+      render(); // 第一页立刻上屏
+
+      final isHome = widget.kind == TimelineKind.home;
+      var localCursor = cursor; // home：独立游标，从第一页的 nextCursor 起
+      var localPage = 2; // following：独立页码，从 2 起（_page 是旧编号，不用）
+      var pagesFetched = 0; // 本次补拉已额外抓到的页数（第一页不算）
+      var currentPage = p.statuses; // 待判断的「刚处理完的那一页」
+      var currentIsFirst = true; // 首屏：跳过 id 命中判断（置顶微博会误命中）
+      // 第一页本身还能不能往下：首页看游标是否前进，关注流看是否满页
+      final continuable = isHome
+          ? _cursorAdvanced(cursor, '')
+          : p.statuses.length >= _pageCount;
+
+      // 退出原因：区分「真接上旧内容」和「被 60 页上限截断」——后者必须留信号。
+      BackfillStop? why = continuable
+          ? backfillStopReason(
+              knownIds: knownIds,
+              newestKnownTime: newestKnownTime,
+              page: currentPage,
+              pagesFetched: pagesFetched,
+              isFirstPage: currentIsFirst,
+            )
+          : BackfillStop.cursorEnd;
+
+      while (why == null) {
+        TimelineRawDto np;
+        try {
+          np = isHome
+              ? await api.homeTimelinePageRaw(
+                  sinceId: localCursor,
+                  count: _pageCount,
+                )
+              : await api.followingTimelinePageRaw(
+                  page: localPage,
+                  count: _pageCount,
+                );
+        } catch (_) {
+          // 任何一页失败 → 停止补拉，保留已拿到的内容，绝不清屏
+          why = BackfillStop.failed;
+          break;
+        }
+        if (!mounted) return;
+        pagesFetched++;
+        final pageList = np.statuses;
+        fetchedPages.add(pageList);
+        if (np.raw.isNotEmpty) fetchedRaws.add(np.raw);
+        render();
+
+        // 页间限速：60 页连打容易触发风控，每页后歇一下再拉下一页
+        await Future<void>.delayed(kBackfillPageDelay);
+        if (!mounted) return;
+
+        // 停止条件 (d)：游标没前进（home）/ 本页不足一页（following）
+        if (isHome) {
+          final next = np.nextCursor ?? '';
+          final advanced = _cursorAdvanced(next, localCursor);
+          localCursor = next;
+          if (!advanced) {
+            why = BackfillStop.cursorEnd;
+            break;
+          }
         } else {
-          // 已有内容：**只往前面插入「从未见过的新微博」**，其余原地不动。
-          //
-          // 为什么要 prepend 而不是整页替换：替换会把锚点那条一并冲掉，
-          // 「上次刷到这里」的分割线就没了 —— 用户反馈的正是这个。
-          // 插到前面后，锚点仍在列表里、且在内容上的位置不变。
-          // `_cursor` / `_page` 同样**不能动**：那是「继续往下翻旧内容」用的。
-          final newOnes = fresh
-              .where((s) => !_seen.contains(s.id))
-              .toList(growable: false);
-          if (newOnes.isNotEmpty) {
-            _items.insertAll(0, newOnes);
-            _seen.addAll(newOnes.map((s) => s.id));
-            // 缓存存的是原文：新页插到最前，重开时按顺序解析 + 去重，
-            // 第一条优先保留 → 还原出来的顺序与新页在前一致。
-            if (p.raw.isNotEmpty) _pages.insert(0, p.raw);
+          localPage++;
+          if (pageList.length < _pageCount) {
+            why = BackfillStop.cursorEnd;
+            break;
           }
         }
-        _ensureMarkerAnchor();
-      });
+        currentPage = pageList;
+        currentIsFirst = false;
+        why = backfillStopReason(
+          knownIds: knownIds,
+          newestKnownTime: newestKnownTime,
+          page: currentPage,
+          pagesFetched: pagesFetched,
+          isFirstPage: currentIsFirst,
+        );
+      }
+
+      // 触到上限 = 中间可能还缺一截，**不能静默当成功**。
+      // 现在先把信号留在 state + 日志里；UI 提示待定（见 `_backfillHitCap`）。
+      _backfillHitCap = why == BackfillStop.capReached;
+      if (_backfillHitCap) {
+        debugPrint(
+          '[timeline] 补拉触到上限（$kMaxBackfillPages 页 / 本轮共抓 '
+          '${pagesFetched + 1} 页），本次最旧只覆盖到 '
+          '${currentPage.isEmpty ? '?' : currentPage.last.time}，'
+          '旧内容最新是 $newestKnownTime —— 中间可能仍有断档，'
+          '且下次刷新不会自动接着补',
+        );
+      }
+
+      // `following` 按**页码**翻页；刷新后服务端页号已因新内容插入而整体错位。
+      // 补拉了 N 页后（本地页码走到 localPage），旧编号不再可靠 —— 有意把
+      // 「继续往下翻」的起点对齐到新编号的下一页，避免下次 `_more()` 从头重复拉。
+      // 一页都没补（localPage 仍为 2）时保持原值，别把已有翻页进度打回去。
+      // `home` 的 `_cursor` 是「旧内容底部」的游标，补拉只填了它上面的断层，
+      // 所以 `_cursor` 完全不动。
+      if (!isHome && pagesFetched > 0) {
+        _page = localPage;
+      }
+
       await _persist();
     } catch (e) {
       if (!mounted) return;
