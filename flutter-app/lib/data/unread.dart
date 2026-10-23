@@ -122,6 +122,18 @@ class UnreadStore extends ChangeNotifier {
     }
   }
 
+  /// 只把待落盘的防抖 Timer 取消，**不做任何 IO**。
+  ///
+  /// 给 widget 测试用：测试里改完未读集后如果调 [flush]，会走到真正的文件写入
+  /// （`path_provider` 在测试环境无插件实现，会挂住不返回），而测试结束时又
+  /// 不允许留着「未触发的 Timer」。这个口子只砍计时器，内存状态原样保留。
+  @visibleForTesting
+  void cancelPendingSave() {
+    _timer?.cancel();
+    _timer = null;
+    _dirty = false;
+  }
+
   @override
   void dispose() {
     _timer?.cancel();

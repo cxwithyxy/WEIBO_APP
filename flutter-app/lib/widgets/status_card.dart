@@ -400,17 +400,32 @@ class _Header extends StatelessWidget {
 }
 
 /// 未读小绿点（8px）。只在时间线卡片出现，见 [StatusCard.unread]。
+///
+/// 带 `Semantics(label: '未读')`：
+///  - **可访问性**：未读与否原本只靠颜色表达，读屏用户完全感知不到，
+///    加一个标签让「未读」这件事也有一份非视觉信号；
+///  - **可验证性**：绿点是纯绘制（无文字），截图又指望不上（MuMu 多屏下
+///    `screencap -d <app屏>` 恒返回 `Status: -2`），而带语义标签后真机可以
+///    直接 `uiautomator dump` 断言「可见卡片的最右侧存在『未读』节点」——
+///    已在 MuMu 上实测到该节点（bounds 落在头部行最右）。
+///
+///  ⚠️ 只有**在视口内**的卡片才会导出语义节点：卡片头部滚出屏幕时查不到
+///  「未读」节点属正常现象，别误判成绿点没画。
 class _UnreadDot extends StatelessWidget {
   const _UnreadDot();
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      width: 8,
-      height: 8,
-      decoration: BoxDecoration(
-        color: Colors.green.shade600,
-        shape: BoxShape.circle,
+    return Semantics(
+      label: '未读',
+      container: true,
+      child: Container(
+        width: 8,
+        height: 8,
+        decoration: BoxDecoration(
+          color: Colors.green.shade600,
+          shape: BoxShape.circle,
+        ),
       ),
     );
   }
