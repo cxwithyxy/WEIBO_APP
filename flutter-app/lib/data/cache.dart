@@ -160,25 +160,23 @@ class StatusCache {
   }
 }
 
-/// 「你上次刷到这里」+「上次离开时的位置」：每个信息流一个文件
-/// （`marker/<feed>.json`）。
+/// 「上次离开时的位置」：每个信息流一个文件（`marker/<feed>.json`）。
 ///
-/// 三样东西一起存：
+/// 存两样东西：
+///  1. `offset` —— 离开时列表的**像素滚动偏移**。「回到离开的地方」靠它。
+///  2. `topId`  —— 离开时**视口顶部**那条的 id，恢复后用来**校验落点**。
 ///
-///  1. `id` —— 上次刷到的**最深处**那条微博 id。这是列表里分隔条
-///     （`LastSeenBar`）的语义：它以上 = 看过的，以下 = 没看的。只增不减。
-///     之所以记 id 而不是「列表第几条」：index 会被刷新、去重、广告过滤弄漂；
-///     id 不会（微博 id **单调递增** → 大小关系就是先后关系）。
-///  2. `offset` —— 离开时列表的**像素滚动偏移**。「回到离开的地方」靠它。
-///  3. `topId` —— 离开时**视口顶部**那条的 id，恢复后用来**校验落点**。
+/// `id` 是历史遗留字段：它曾是「上次刷到这里」分割条（`LastSeenBar`）的锚点，
+/// 现在分割条已被**未读绿点**取代，`id` 不再参与任何逻辑。这里保留字段只是为了
+/// **向后兼容**旧文件 —— 老文件带 id 照常能读出 offset/topId；新文件 id 写成空串。
 ///
 /// 为什么敢用像素偏移这种「脆弱」的东西：缓存里存的是服务端**响应原文**，
 /// 重开时走同一套解析还原 → 条目顺序和每条的高度都跟离开时一模一样，
-/// 所以同一个偏移量必然落在同一条上。id 依然保留，因为它**不依赖下标**。
+/// 所以同一个偏移量必然落在同一条上。`topId` 用来校验、纠偏。
 class ReadMarker {
-  const ReadMarker({required this.id, this.offset, this.topId});
+  const ReadMarker({this.id = '', this.offset, this.topId});
 
-  /// 最深处那条微博 id（非空才有意义）
+  /// 历史字段：旧版「上次刷到这里」的锚点 id。新版不再使用。
   final String id;
 
   /// 离开时列表的滚动偏移（像素）；未知为 null
@@ -194,20 +192,26 @@ class ReadMarker {
   static Future<File> _legacy(String feed) async =>
       File('${(await _sub('marker')).path}/$feed.txt');
 
+  /// 是否还有值得恢复的位置信息（新版只看 offset/topId）。
+  bool get hasPosition =>
+      offset != null || (topId != null && topId!.isNotEmpty);
+
   static Future<ReadMarker?> load(String feed) async {
     try {
       final f = await _json(feed);
       if (await f.exists()) {
         final m = jsonDecode(await f.readAsString()) as Map<String, Object?>;
-        final id = m['id']?.toString().trim() ?? '';
-        if (id.isEmpty) return null;
-        return ReadMarker(
-          id: id,
+        final marker = ReadMarker(
+          id: m['id']?.toString().trim() ?? '',
           offset: (m['offset'] as num?)?.toDouble(),
           topId: m['topId']?.toString(),
         );
+        // 新版只认位置：id 可以为空，只要有 offset/topId 就有效。
+        // （旧文件带 id 也能读出来，向后兼容。）
+        return marker.hasPosition ? marker : null;
       }
-      // 兼容老格式：只有 id，没有位置（位置就退回顶部）
+      // 兼容 v1 老格式：只有 id、没有位置。位置记忆无从恢复，返回它也无用，
+      // 但保留解析路径避免抛异常。
       final l = await _legacy(feed);
       if (!await l.exists()) return null;
       final id = (await l.readAsString()).trim();
@@ -218,7 +222,8 @@ class ReadMarker {
   }
 
   static Future<void> save(String feed, ReadMarker m) async {
-    if (m.id.isEmpty) return;
+    // 新版只存位置：没有位置就不必写；id 为空也允许写。
+    if (!m.hasPosition) return;
     try {
       await _atomicWrite(
         await _json(feed),

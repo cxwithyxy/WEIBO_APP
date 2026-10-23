@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../data/cache.dart';
+import '../data/unread.dart';
 import '../data/video_cache.dart';
 import '../session.dart';
 import '../util/backfill_setting.dart';
@@ -161,7 +162,7 @@ class _SettingsPageState extends State<SettingsPage> {
     return Scaffold(
       appBar: AppBar(title: const Text('设置')),
       body: AnimatedBuilder(
-        animation: Settings.instance,
+        animation: Listenable.merge([Settings.instance, UnreadStore.instance]),
         builder: (context, _) {
           final s = Settings.instance;
           return ListView(
@@ -179,6 +180,23 @@ class _SettingsPageState extends State<SettingsPage> {
                 title: const Text('每次刷新最多补拉页数'),
                 subtitle: Text(backfillPagesLabel(s.maxBackfillPages)),
                 onTap: _pickMaxBackfillPages,
+              ),
+              ListTile(
+                leading: const Icon(Icons.mark_email_unread_outlined),
+                title: const Text('清除全部未读标记'),
+                subtitle: Text(
+                  UnreadStore.instance.count > 0
+                      ? '当前 ${UnreadStore.instance.count} 条未读'
+                      : '当前没有未读标记',
+                ),
+                onTap: () {
+                  final n = UnreadStore.instance.clearAll();
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text(n > 0 ? '已清除 $n 条未读标记' : '没有未读标记'),
+                    ),
+                  );
+                },
               ),
               const Divider(height: 24),
               _section(context, '缓存'),

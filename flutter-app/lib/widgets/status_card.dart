@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 
 import '../data/attitude.dart';
 import '../data/status_write.dart';
+import '../data/unread.dart';
 import '../src/rust/api/dto.dart';
 import '../src/rust/api/weibo.dart' as api;
 import '../pages/user_page.dart';
@@ -21,6 +22,7 @@ class StatusCard extends StatefulWidget {
     this.onTap,
     this.showActions = true,
     this.expandByDefault = false,
+    this.unread = false,
   });
 
   final StatusDto status;
@@ -30,6 +32,13 @@ class StatusCard extends StatefulWidget {
   /// 正文**默认展开全文**（详情页「正文」tab 用）：
   /// 长文会自动把全文拉下来直接展示，不再显示「展开全文」。
   final bool expandByDefault;
+
+  /// 是否参与**未读绿点**。
+  ///
+  /// **只有首页时间线传 true**；详情 / 搜索 / 我的 / 用户页 / 热搜等一律不传
+  /// （默认 false）—— 这是共享组件，不能拉得满 App 都是点。
+  /// 传 true 后卡片会监听 [UnreadStore]，本条从未读变已读时自行刷新绿点。
+  final bool unread;
 
   @override
   State<StatusCard> createState() => _StatusCardState();
@@ -41,17 +50,30 @@ class _StatusCardState extends State<StatusCard> {
   late int _likes = widget.status.likes;
   bool _busy = false;
 
+  /// 本条是否显示未读绿点（仅 `unread == true` 时可能为真）。
+  late bool _unread =
+      widget.unread && UnreadStore.instance.contains(widget.status.id);
+
   @override
   void initState() {
     super.initState();
     AttitudeStore.instance.addListener(_onAttitudeChanged);
+    if (widget.unread) UnreadStore.instance.addListener(_onUnreadChanged);
     _adoptLocalAttitude();
   }
 
   @override
   void dispose() {
     AttitudeStore.instance.removeListener(_onAttitudeChanged);
+    if (widget.unread) UnreadStore.instance.removeListener(_onUnreadChanged);
     super.dispose();
+  }
+
+  /// 未读集变了：只有**本条**的状态真的变了才 setState，避免整列表重建。
+  void _onUnreadChanged() {
+    if (!mounted) return;
+    final v = widget.unread && UnreadStore.instance.contains(widget.status.id);
+    if (v != _unread) setState(() => _unread = v);
   }
 
   /// 本机写过就采用本机值（保证同一条微博在多个列表里一致）。
@@ -76,6 +98,12 @@ class _StatusCardState extends State<StatusCard> {
   @override
   void didUpdateWidget(covariant StatusCard oldWidget) {
     super.didUpdateWidget(oldWidget);
+    // 未读监听随 `unread` 开关增删（只有时间线会开）
+    if (widget.unread && !oldWidget.unread) {
+      UnreadStore.instance.addListener(_onUnreadChanged);
+    } else if (!widget.unread && oldWidget.unread) {
+      UnreadStore.instance.removeListener(_onUnreadChanged);
+    }
     final idChanged = oldWidget.status.id != widget.status.id;
     // 服务端值变了（列表刷新/详情页重新拉取）就采纳它 —— 这才是真相。
     // 只有「服务端值没变」时才保留本地乐观状态，避免无关 rebuild 把 +1 抹掉。
@@ -89,6 +117,9 @@ class _StatusCardState extends State<StatusCard> {
       _likes = widget.status.likes;
       _liked = widget.status.liked;
     }
+    // 条目换了 / 未读集变了 → 重算绿点（build 紧随其后，直接改字段即可）
+    final v = widget.unread && UnreadStore.instance.contains(widget.status.id);
+    _unread = v;
   }
 
   Future<void> _toggleLike() async {
@@ -162,7 +193,7 @@ class _StatusCardState extends State<StatusCard> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            _Header(status: s),
+            _Header(status: s, unread: _unread),
             const SizedBox(height: 8),
             if (s.text.isNotEmpty)
               _BodyText(status: s, expandByDefault: widget.expandByDefault),
@@ -282,9 +313,12 @@ class _StatusCardState extends State<StatusCard> {
 // ------------------------------------------------------------------ 头部
 
 class _Header extends StatelessWidget {
-  const _Header({required this.status});
+  const _Header({required this.status, this.unread = false});
 
   final StatusDto status;
+
+  /// 是否显示未读绿点（放在头部行**最右侧**）
+  final bool unread;
 
   @override
   Widget build(BuildContext context) {
@@ -353,7 +387,31 @@ class _Header extends StatelessWidget {
               style: TextStyle(fontSize: 10, color: Colors.grey.shade600),
             ),
           ),
+        // 未读绿点：与用户名同一行、放**最右侧**。
+        // 顶部留 6px 让它和第一行用户名大致对齐（卡片顶部 padding 12px）。
+        if (unread)
+          const Padding(
+            padding: EdgeInsets.only(left: 6, top: 6),
+            child: _UnreadDot(),
+          ),
       ],
+    );
+  }
+}
+
+/// 未读小绿点（8px）。只在时间线卡片出现，见 [StatusCard.unread]。
+class _UnreadDot extends StatelessWidget {
+  const _UnreadDot();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 8,
+      height: 8,
+      decoration: BoxDecoration(
+        color: Colors.green.shade600,
+        shape: BoxShape.circle,
+      ),
     );
   }
 }

@@ -4,12 +4,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 
 import '../data/cache.dart';
+import '../data/unread.dart';
 import '../session.dart';
 import '../src/rust/api/dto.dart';
 import '../src/rust/api/weibo.dart' as api;
 import '../util/dedup.dart';
-import '../util/marker_place.dart';
 import '../util/timeline_backfill.dart';
+import '../util/unread_center.dart';
 import '../widgets/common.dart';
 import '../widgets/status_card.dart';
 import 'detail_page.dart';
@@ -53,23 +54,15 @@ class _TimelinePageState extends State<TimelinePage>
   /// 列表 key —— 用来从 RenderSliver 精确取「视口最下面那条」的下标
   final _listKey = GlobalKey();
 
-  /// 「你上次刷到这里」锚点：进页面时从磁盘读一次，**本次会话固定不动**
+  /// 上一帧每条卡片「标题相对中线的 y」（负 = 中线以上）。
   ///
-  /// 它是**常驻**的：即使锚点那条微博当前不在列表里（被翻页裁掉等），
-  /// `_entries()` 也会用 id 大小把它插到正确的相对位置 —— 不能让标记凭空消失。
-  String? _markerAnchorId;
+  /// 只服务于**未读穿越判定**：滚动采样时对比前后两帧，`prev >= 0 && now < 0`
+  /// 才算「被推过中线」。一次滚动手势结束 / 位置还原 / 刷新重建列表后清空，
+  /// 免得把布局变化（刷新插入、关广告重排）误当成用户穿越。
+  final _prevTitleY = <String, double>{};
 
-  /// 本次会话看见过的**最深**一条（只存内存，`_deepestId` 是它的微博 id）。
-  ///
-  /// ⚠️ 「更深」用**列表下标**（`_deepestIndex`）判断，**不能**用 id 大小：
-  /// 关注流里会夹着**置顶微博**（id 很小、却排在最前），一旦拿 id 比大小，
-  /// 标记就会被置顶那条钉死、之后永远不再推进 ——
-  /// 真机上的表现就是「不管怎么滑，标记都挂在顶部」。
-  ///
-  /// 只在内存里跟 —— **不落盘**。用户要求：滚动过程中不更新标记，
-  /// 只有 App 切后台或退出时，才把它写下去当作新的「上次刷到这里」。
-  String? _deepestId;
-  int _deepestIndex = -1;
+  /// 未读穿越采样的节流时间戳（毫秒）。滚动每帧都算太浪费，~120ms 一次。
+  int _lastUnreadSampleMs = 0;
 
   /// 离开时列表的滚动偏移 + 视口顶部那条的 id —— 「回到离开的地方」用
   double? _savedOffset;
@@ -80,9 +73,6 @@ class _TimelinePageState extends State<TimelinePage>
 
   /// 恢复位置最多纠偏几次（懒加载列表的 maxScrollExtent 只是估算值）
   static const _restoreAttempts = 3;
-
-  /// 「你上次刷到这里」那条标记条的大致高度 —— 判断「完整可见」时留的余量
-  static const _markerBarHeight = 48.0;
 
   /// 每页条数（刷新补拉、翻页都必须一致，否则「本页是否满页」判不准）
   static const _pageCount = 20;
@@ -118,22 +108,21 @@ class _TimelinePageState extends State<TimelinePage>
     WidgetsBinding.instance.addObserver(this);
     _scroll.addListener(_onScroll);
     WidgetsBinding.instance.addPostFrameCallback((_) async {
-      // 锚点要在渲染前就绪（否则列表先出来、标记再插进去会跳一下）
+      // 未读集要先加载好：列表首帧构建时卡片按 id 查它，绿点才准。
+      await UnreadStore.instance.load(_feedKey);
+      if (!mounted) return;
+      // 只读位置；旧的「上次刷到这里」锚点 id 已废弃（见 ReadMarker）。
       final m = await ReadMarker.load(_feedKey);
       if (!mounted) return;
       setState(() {
-        _markerAnchorId = m?.id;
-        _deepestId = m?.id;
         _savedOffset = m?.offset;
         _savedTopId = m?.topId;
       });
       final restored = await _loadFromCache();
       if (!mounted) return;
-      _ensureMarkerAnchor();
       // ★ 有缓存就**不自动刷新**。
       //   之前这里无条件 refresh()，而 refresh() 会把整个列表换成最新一页
-      //   → 上次刷到的位置连同那些旧条目一起被冲掉，「上次刷到哪」等于没生效
-      //   （用户反馈的正是这个）。要新内容就下拉刷新（滚到顶再拉）。
+      //   → 上次刷到的位置连同那些旧条目一起被冲掉。要新内容就下拉刷新。
       if (restored) {
         _restoreScroll();
       } else {
@@ -177,6 +166,13 @@ class _TimelinePageState extends State<TimelinePage>
     if (_scroll.position.pixels >= _scroll.position.maxScrollExtent - 300) {
       _more();
     }
+    // 未读穿越判定：滚动时 ~120ms 采一次（别每帧都遍历 sliver），
+    // 滚动手势结束时再补一次最终采样（见 `_onScrollEnd`）。
+    final now = DateTime.now().millisecondsSinceEpoch;
+    if (now - _lastUnreadSampleMs >= 120) {
+      _lastUnreadSampleMs = now;
+      _markUnreadCrossings();
+    }
   }
 
   /// 用缓存先渲染（秒开）。缓存里存的是原文，用 core 的解析路径还原。
@@ -215,34 +211,23 @@ class _TimelinePageState extends State<TimelinePage>
       _page = snap.page ?? (snap.pages.length + 1);
       _hasMore = true;
     });
+    // 缓存还原**不加未读**（规则第 5 条）：它们的状态由持久化未读集决定。
+    // 顺手剪枝：把已经不在缓存里的未读 id 丢掉，防无上限膨胀。
+    UnreadStore.instance.retain(all.map((s) => s.id));
+    _prevTitleY.clear(); // 还原出的位置不参与穿越判定
     return true;
   }
 
-  /// 把「本次看见过的最深一条 + 离开时的位置」写盘成新的「上次刷到这里」。
+  /// 把「离开时的位置」写盘（切后台 / 退出时调用），顺带把未读集落盘。
   ///
-  /// **只在切后台 / 退出时调用**（用户要求：滚动时不动标记，刷新也不动标记）。
+  /// 分割条已废，这里**只存位置**（offset/topId）；旧 `id` 字段不再使用。
   Future<void> _commitMarker() async {
     if (_restoring) return; // 恢复途中跳来跳去的中间态不写盘
-    // 位置（offset/topId）每次都要存，否则「回到离开的地方」会失效；
-    // 标记 id 优先用本会话真的读到的位置，没读过则沿用原来的锚点。
-    final id = _deepestId ?? _markerAnchorId;
-    if (id == null || id.isEmpty) return;
     await ReadMarker.save(
       _feedKey,
-      ReadMarker(id: id, offset: _savedOffset, topId: _savedTopId),
+      ReadMarker(offset: _savedOffset, topId: _savedTopId),
     );
-  }
-
-  /// 保证「始终有一个标记」：磁盘上没有（首次装、标记文件被清）就取当前第一条。
-  ///
-  /// 用户反馈「还是看不到标记」，根因就是没标记时 `_entries()` 什么也不插 ——
-  /// 现在没标记也会就地立一个，列表里总能看到这条分割线。
-  void _ensureMarkerAnchor() {
-    if (_markerAnchorId != null) return;
-    final vis = _visibleItems();
-    if (vis.isEmpty) return;
-    _markerAnchorId = vis.first.id;
-    _deepestId ??= vis.first.id;
+    await UnreadStore.instance.flush();
   }
 
   Future<void> _persist() => FeedCache.save(
@@ -310,8 +295,10 @@ class _TimelinePageState extends State<TimelinePage>
           _page = 2;
           _hasMore = p.statuses.length >= _pageCount &&
               _cursorAdvanced(cursor, '');
-          _ensureMarkerAnchor();
         });
+        // 刚加载进来的都算未读（规则第 1 条）
+        UnreadStore.instance.addAll(fresh.map((s) => s.id));
+        _prevTitleY.clear();
         await _persist();
         return;
       }
@@ -355,8 +342,16 @@ class _TimelinePageState extends State<TimelinePage>
             ..clear()
             ..addAll(fetchedRaws)
             ..addAll(oldPages);
-          _ensureMarkerAnchor();
         });
+        // 新增卡片算未读（规则第 1 条）。只加**本次新拉到**的 id：
+        // `knownIds` 是刷新前的快照，过滤掉它就避免把已读的旧条目重新标未读。
+        UnreadStore.instance.addAll(
+          fetchedPages
+              .expand((page) => page.map((s) => s.id))
+              .where((id) => id.isNotEmpty && !knownIds.contains(id)),
+        );
+        // 列表重建 → 穿越观测从头开始（不判定，下一次滚动才判）
+        _prevTitleY.clear();
       }
 
       render(); // 第一页立刻上屏
@@ -475,6 +470,8 @@ class _TimelinePageState extends State<TimelinePage>
         _page = localPage;
       }
 
+      // 剪枝：只保留列表里还存在的未读 id（防无上限膨胀）。
+      UnreadStore.instance.retain(_items.map((s) => s.id));
       await _persist();
     } catch (e) {
       if (!mounted) return;
@@ -503,6 +500,9 @@ class _TimelinePageState extends State<TimelinePage>
         // 游标没前进（或拿不到游标）= 服务端在重复给同一批 → 停，别再拉
         _hasMore = p.statuses.isNotEmpty && _cursorAdvanced(next, prevCursor);
       });
+      // 翻页追加的也是「刚加载进来」→ 未读；顺手剪枝防膨胀。
+      UnreadStore.instance.addAll(fresh.map((s) => s.id));
+      UnreadStore.instance.retain(_items.map((s) => s.id));
       await _persist();
     } catch (_) {
       if (mounted) setState(() => _hasMore = false);
@@ -518,74 +518,70 @@ class _TimelinePageState extends State<TimelinePage>
       ? _items.where((s) => !s.isAd).toList(growable: false)
       : _items;
 
-  /// 锚点在 visible 中的下标；没锚点或不在列表里 → -1
-  int _markerAt(List<StatusDto> visible) {
-    final id = _markerAnchorId;
-    if (id == null) return -1;
-    return visible.indexWhere((s) => s.id == id);
+  /// 记录当前位置（视口顶部那条 + 像素偏移）。只存内存，切后台/退出时落盘。
+  void _recordPosition() {
+    if (!mounted || _items.isEmpty || !_scroll.hasClients) return;
+    final visible = _visibleItems();
+    _savedOffset = _scroll.position.pixels;
+    final topIdx = _edgeEntryIndex(bottom: false);
+    if (topIdx != null && topIdx >= 0 && topIdx < visible.length) {
+      _savedTopId = visible[topIdx].id;
+    }
   }
 
-  /// 把 visible 展开成实际渲染序列：微博条目 + （始终一条）锚点占位
-  List<Object> _entries(List<StatusDto> visible) {
-    final out = <Object>[];
-    if (visible.isEmpty) return out;
-    final at = _markerAt(visible);
-    if (at >= 0) {
-      for (var i = 0; i < visible.length; i++) {
-        out.add(visible[i]);
-        // 用户要的效果：C（上次刷到的）和 D（更早的）之间
-        if (i == at) out.add(const _MarkerToken());
-      }
-      return out;
-    }
-
-    // 锚点那条当前不在列表里（被翻页裁掉 / 刷掉了）——
-    // **不能让标记凭空消失**，按 id 找它“本该在”的位置（见 util/marker_place.dart，
-    // 那里有测试锁着方向 + 置顶微博的坑）。
-    final id = _markerAnchorId;
-    if (id == null) return List<Object>.of(visible);
-    final pos = markerInsertIndex(visible.map((s) => s.id).toList(), id);
-    for (var i = 0; i < visible.length; i++) {
-      if (i == pos) out.add(const _MarkerToken());
-      out.add(visible[i]);
-    }
-    if (pos >= visible.length) out.add(const _MarkerToken());
-    return out;
+  /// 未读「穿越判定」采样（纯逻辑见 `util/unread_center.dart`）。
+  ///
+  /// 只对**当前已构建**的卡片取标题/底边位置，与上一帧对比：
+  ///  - `prev >= 0 && now < 0`（标题从下往上穿过中线）→ 已读；
+  ///  - 卡片底边 < 0（被推出屏幕顶部）→ 已读（需求方指定的兜底规则）；
+  ///  - **首次观测就在中线以上的不算读** —— 下拉刷新后插在顶部的新微博因此
+  ///    保持绿点，直到用户真的把它推走（cx 要的正是这个）。
+  ///
+  /// 标题位置 = 卡片顶边 + [kStatusTitleOffset]（估算，不追求像素级）。
+  void _markUnreadCrossings() {
+    if (_restoring || !mounted || _items.isEmpty || !_scroll.hasClients) return;
+    final s = _sliver();
+    if (s == null) return;
+    final p = _scroll.position;
+    final midline = p.viewportDimension / 2;
+    final visible = _visibleItems();
+    final nowTitleY = <String, double>{};
+    final bottomY = <String, double>{};
+    s.visitChildren((child) {
+      if (child is! RenderBox) return;
+      final top = s.childScrollOffset(child);
+      if (top == null) return;
+      final i = s.indexOf(child);
+      if (i < 0 || i >= visible.length) return;
+      final id = visible[i].id;
+      if (id.isEmpty) return;
+      final viewportTop = top - p.pixels;
+      nowTitleY[id] = viewportTop + kStatusTitleOffset - midline;
+      bottomY[id] = viewportTop + child.size.height;
+    });
+    final read = crossedToRead(
+      prevTitleY: _prevTitleY,
+      nowTitleY: nowTitleY,
+      itemBottomY: bottomY,
+    );
+    if (read.isNotEmpty) UnreadStore.instance.markReadAll(read);
+    _prevTitleY
+      ..clear()
+      ..addAll(nowTitleY);
   }
 
-  /// 滚动停止 → 记两样东西：
+  /// 滚动停止 → 记位置 + 最后一次未读采样，然后清空穿越观测。
   ///
-  ///  ① **未读边界**：视口最下面那条。只在「比已记录的更深」时才推进
-  ///     —— 纯 id 比较，**不依赖下标**，所以刷新/去重/广告过滤都不会让它漂。
-  ///  ② **离开时的位置**：当前像素偏移 + 视口顶部那条的 id。滚上滚下都要跟。
+  /// 一次滚动手势结束就忘掉上一帧位置：下一次手势从「首次观测」重新开始，
+  /// 这样刷新插入 / 关广告重排造成的布局位移不会被误判成用户穿越。
   ///
-  /// 顺带一个细节：本页 keepAlive，切 tab 不会 dispose，所以不能只靠 dispose 记录。
+  /// 本页 keepAlive，切 tab 不会 dispose，所以位置不能只靠 dispose 记录。
   void _onScrollEnd() {
     if (_restoring) return;
     if (!mounted || _items.isEmpty || !_scroll.hasClients) return;
-    final entries = _entries(_visibleItems());
-
-    // 离开时的位置：滚上滚下都跟（只存内存，切后台/退出时一起落盘）
-    _savedOffset = _scroll.position.pixels;
-    final topIdx = _edgeEntryIndex(bottom: false);
-    if (topIdx != null && topIdx >= 0 && topIdx < entries.length) {
-      final e = entries[topIdx];
-      _savedTopId = e is StatusDto ? e.id : null;
-    }
-
-    // 本次「刷到」的锚点：视口里**完整可见的最后一条**（见 _lastFullyVisibleIndex）；
-    // 整屏长图帖、一条都不完整时，退回视口顶部那条 —— 无论哪种都保证标记在屏内。
-    final anchorIdx = _lastFullyVisibleIndex() ?? _edgeEntryIndex(bottom: false);
-
-    // 只推内存，**不落盘**：用户要求标记只在切后台/退出时更新。
-    // 「更深」按下标比（见 `_deepestIndex` 注释），不能按 id 大小。
-    if (anchorIdx != null && anchorIdx >= 0 && anchorIdx < entries.length) {
-      final e = entries[anchorIdx];
-      if (e is StatusDto && anchorIdx > _deepestIndex) {
-        _deepestIndex = anchorIdx;
-        _deepestId = e.id;
-      }
-    }
+    _recordPosition();
+    _markUnreadCrossings();
+    _prevTitleY.clear();
   }
 
   /// 列表内部的 Sliver（拿不到就 null）
@@ -633,29 +629,6 @@ class _TimelinePageState extends State<TimelinePage>
       final top = s.childScrollOffset(child);
       if (top == null || top > limit) return;
       // `indexOf` 返回非空 int，不必判空
-      final i = s.indexOf(child);
-      if (i > best) best = i;
-    });
-    return best < 0 ? null : best;
-  }
-
-  /// 视口里**完整可见的最后一条**的下标（带一点余量，保证它后面的标记条也在屏内）。
-  ///
-  /// 为什么不用「视口最下面那条」：那条底部被切掉，标记插在它后面会掉到
-  /// **屏幕下沿之外** —— 重开时用户看不到标记，以为功能没生效（真机反馈）。
-  /// 整屏都是长图帖（没有一条完整可见）时返回 null，调用方退回视口顶部那条。
-  int? _lastFullyVisibleIndex() {
-    final s = _sliver();
-    if (s == null || !_scroll.hasClients) return null;
-    final p = _scroll.position;
-    // 留 _markerBarHeight 的余量：让「锚点那条 + 它下面的标记条」都在屏内
-    final limit = p.pixels + p.viewportDimension - _markerBarHeight;
-    var best = -1;
-    s.visitChildren((child) {
-      if (child is! RenderBox) return;
-      final top = s.childScrollOffset(child);
-      if (top == null) return;
-      if (top + child.size.height > limit) return; // 底部够不到 → 不算完整可见
       final i = s.indexOf(child);
       if (i > best) best = i;
     });
@@ -727,12 +700,12 @@ class _TimelinePageState extends State<TimelinePage>
         _finishRestore(); // 没有校验依据 → 认了
         return;
       }
-      final entries = _entries(_visibleItems());
+      final visible = _visibleItems();
       final idx = _edgeEntryIndex(bottom: false);
-      final at = (idx != null && idx >= 0 && idx < entries.length)
-          ? entries[idx]
+      final at = (idx != null && idx >= 0 && idx < visible.length)
+          ? visible[idx]
           : null;
-      if (at is StatusDto && at.id == wantTopId) {
+      if (at != null && at.id == wantTopId) {
         _finishRestore(); // ✓ 落点正确
         return;
       }
@@ -740,7 +713,7 @@ class _TimelinePageState extends State<TimelinePage>
         _finishRestore(); // 放弃纠偏，保持现状（差几条不影响用）
         return;
       }
-      final k = entries.indexWhere((e) => e is StatusDto && e.id == wantTopId);
+      final k = visible.indexWhere((s) => s.id == wantTopId);
       final avg = _avgEntryExtent();
       if (k < 0 || idx == null || avg == null) {
         _finishRestore();
@@ -757,7 +730,10 @@ class _TimelinePageState extends State<TimelinePage>
   void _finishRestore() {
     if (!_restoring) return;
     _restoring = false;
-    _onScrollEnd(); // 把真实落点写回盘上
+    // 只把真实落点写回内存；**还原不判定未读**（规则第 5 条），
+    // 所以这里不调 `_onScrollEnd`（那会做穿越采样）。
+    _recordPosition();
+    _prevTitleY.clear();
   }
 
   @override
@@ -788,7 +764,6 @@ class _TimelinePageState extends State<TimelinePage>
       animation: Settings.instance,
       builder: (context, _) {
         final visible = _visibleItems();
-        final entries = _entries(visible);
         return RefreshIndicator(
           onRefresh: refresh,
           child: NotificationListener<ScrollEndNotification>(
@@ -800,22 +775,29 @@ class _TimelinePageState extends State<TimelinePage>
               key: _listKey,
               controller: _scroll,
               physics: const AlwaysScrollableScrollPhysics(),
-              itemCount: entries.length + 1,
+              itemCount: visible.length + 1,
               itemBuilder: (context, i) {
-                if (i == entries.length) {
+                if (i == visible.length) {
                   return FooterHint(loading: _loading, hasMore: _hasMore);
                 }
-                final e = entries[i];
-                if (e is _MarkerToken) return const LastSeenBar();
-                final s = e as StatusDto;
+                final s = visible[i];
                 return Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
+                    // `unread: true` 才参与绿点（只有时间线传）；
+                    // 卡片自己监听 UnreadStore，未读变已读时刷新绿点。
                     StatusCard(
                       status: s,
-                      onTap: () => Navigator.of(context).push(
-                        MaterialPageRoute(builder: (_) => DetailPage(mid: s.id)),
-                      ),
+                      unread: UnreadStore.instance.contains(s.id),
+                      onTap: () {
+                        // 点开详情即视为已读（规则第 6 条）
+                        UnreadStore.instance.markRead(s.id);
+                        Navigator.of(context).push(
+                          MaterialPageRoute(
+                            builder: (_) => DetailPage(mid: s.id),
+                          ),
+                        );
+                      },
                     ),
                     const Divider(height: 1),
                   ],
@@ -825,46 +807,6 @@ class _TimelinePageState extends State<TimelinePage>
           ),
         );
       },
-    );
-  }
-}
-
-/// 列表里的锚点占位（不是真实微博，只是插在序列里的一个位置标记）
-class _MarkerToken {
-  const _MarkerToken();
-}
-
-/// 「你上次刷到这里」细分隔条
-class LastSeenBar extends StatelessWidget {
-  const LastSeenBar({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    final c = Theme.of(context).colorScheme;
-    final line = Divider(color: c.outlineVariant, height: 1, thickness: 1);
-    return Container(
-      color: c.secondaryContainer.withAlpha(76),
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
-      child: Row(
-        children: [
-          Expanded(child: line),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 8),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(Icons.bookmark_outline, size: 14, color: c.primary),
-                const SizedBox(width: 4),
-                Text(
-                  '你上次刷到这里',
-                  style: TextStyle(fontSize: 12, color: c.primary),
-                ),
-              ],
-            ),
-          ),
-          Expanded(child: line),
-        ],
-      ),
     );
   }
 }
