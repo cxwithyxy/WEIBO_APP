@@ -12,7 +12,7 @@ import 'package:path_provider/path_provider.dart';
 ///     老缓存依然能被正确解析；存解析结果就会因为模型变化而失效。
 ///  2. **必须一起存游标** —— 只存正文不存游标，「加载更多」就断了。
 class FeedSnapshot {
-  const FeedSnapshot({required this.pages, this.cursor});
+  const FeedSnapshot({required this.pages, this.cursor, this.page});
 
   /// 每次成功请求的响应原文（一页一条，按顺序）
   final List<String> pages;
@@ -20,11 +20,25 @@ class FeedSnapshot {
   /// 下一页游标（首页流是 since_id，关注流是页码）
   final String? cursor;
 
-  Map<String, Object?> toJson() => {'pages': pages, 'cursor': cursor};
+  /// 「下一页页码」（只有按**页码**翻页的流如 following 有意义）。
+  ///
+  /// 为什么要单独存：刷新补拉后 `pages` 里既有新页、又有与它重叠的旧页，
+  /// 用 `pages.length + 1` 推页码会**高估** → 重开后 `_more()` 跳页漏数据。
+  /// 老缓存没有这个字段 → 读出来是 null，调用方回退旧算法（向后兼容）。
+  /// 首页流用游标翻页，不读它。
+  final int? page;
+
+  Map<String, Object?> toJson() => {
+        'pages': pages,
+        'cursor': cursor,
+        'page': page,
+      };
 
   static FeedSnapshot fromJson(Map<String, Object?> m) => FeedSnapshot(
         pages: (m['pages'] as List?)?.cast<String>() ?? const [],
         cursor: m['cursor'] as String?,
+        // 老快照没有 'page' → null，由调用方回退「按页数推」
+        page: (m['page'] as num?)?.toInt(),
       );
 }
 
