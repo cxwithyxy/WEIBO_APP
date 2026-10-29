@@ -7,7 +7,7 @@ import '../frb_generated.dart';
 
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
-// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`
+// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`
 
 class CommentDto {
   final String id;
@@ -173,6 +173,63 @@ class HotItemDto {
           heat == other.heat &&
           rank == other.rank &&
           label == other.label;
+}
+
+/// 「我的评论」的一条。
+///
+/// 不复用 `CommentDto` 是有原因的：这里必须带**被评论的原微博**（`root`），
+/// 而且列表 UI 要展示「我评论了什么」+「评论的是哪条微博」，两者分开渲染。
+class MyCommentDto {
+  /// 评论本身
+  final CommentDto comment;
+
+  /// 被评论的原微博（`myCmt` 每条都带；缺失时为 None，UI 只显示评论正文）
+  final StatusDto? root;
+
+  const MyCommentDto({required this.comment, this.root});
+
+  static Future<MyCommentDto> default_() =>
+      RustLib.instance.api.crateApiDtoMyCommentDtoDefault();
+
+  @override
+  int get hashCode => comment.hashCode ^ root.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is MyCommentDto &&
+          runtimeType == other.runtimeType &&
+          comment == other.comment &&
+          root == other.root;
+}
+
+class MyCommentsPageDto {
+  final List<MyCommentDto> comments;
+
+  /// 下一页游标（数字，原样回传当 `max_id`）
+  final PlatformInt64? nextCursor;
+  final int? total;
+
+  const MyCommentsPageDto({
+    required this.comments,
+    this.nextCursor,
+    this.total,
+  });
+
+  static Future<MyCommentsPageDto> default_() =>
+      RustLib.instance.api.crateApiDtoMyCommentsPageDtoDefault();
+
+  @override
+  int get hashCode => comments.hashCode ^ nextCursor.hashCode ^ total.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is MyCommentsPageDto &&
+          runtimeType == other.runtimeType &&
+          comments == other.comments &&
+          nextCursor == other.nextCursor &&
+          total == other.total;
 }
 
 class QrSessionDto {

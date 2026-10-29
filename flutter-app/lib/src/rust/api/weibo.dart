@@ -143,6 +143,12 @@ Future<CommentPageDto> commentsPage({
   flow: flow,
 );
 
+/// 「我的评论」—— 我发出的评论（`/ajax/message/myCmt`）。
+///
+/// `cursor` 传上一页的 `next_cursor`；首页传 `None`。
+Future<MyCommentsPageDto> myComments({PlatformInt64? cursor}) =>
+    RustLib.instance.api.crateApiWeiboMyComments(cursor: cursor);
+
 /// 转发列表
 Future<List<StatusDto>> reposts({required String mid, required int page}) =>
     RustLib.instance.api.crateApiWeiboReposts(mid: mid, page: page);

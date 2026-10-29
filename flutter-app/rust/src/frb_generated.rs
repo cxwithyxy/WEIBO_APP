@@ -39,7 +39,7 @@ flutter_rust_bridge::frb_generated_boilerplate!(
     default_rust_auto_opaque = RustAutoOpaqueMoi,
 );
 pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_VERSION: &str = "2.13.0";
-pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_CONTENT_HASH: i32 = -715319889;
+pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_CONTENT_HASH: i32 = 569243287;
 
 // Section: executor
 
@@ -1055,6 +1055,106 @@ fn wire__crate__api__weibo__my_blog_impl(
                     })()
                     .await,
                 )
+            }
+        },
+    )
+}
+fn wire__crate__api__dto__my_comment_dto_default_impl(
+    port_: flutter_rust_bridge::for_generated::MessagePort,
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_normal::<flutter_rust_bridge::for_generated::SseCodec, _, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "my_comment_dto_default",
+            port: Some(port_),
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            deserializer.end();
+            move |context| {
+                transform_result_sse::<_, ()>((move || {
+                    let output_ok = Ok::<_, ()>(crate::api::dto::MyCommentDto::default())?;
+                    std::result::Result::Ok(output_ok)
+                })())
+            }
+        },
+    )
+}
+fn wire__crate__api__weibo__my_comments_impl(
+    port_: flutter_rust_bridge::for_generated::MessagePort,
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_async::<flutter_rust_bridge::for_generated::SseCodec, _, _, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "my_comments",
+            port: Some(port_),
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            let api_cursor = <Option<i64>>::sse_decode(&mut deserializer);
+            deserializer.end();
+            move |context| async move {
+                transform_result_sse::<_, crate::api::error::WeiboFailure>(
+                    (move || async move {
+                        let output_ok = crate::api::weibo::my_comments(api_cursor).await?;
+                        std::result::Result::Ok(output_ok)
+                    })()
+                    .await,
+                )
+            }
+        },
+    )
+}
+fn wire__crate__api__dto__my_comments_page_dto_default_impl(
+    port_: flutter_rust_bridge::for_generated::MessagePort,
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_normal::<flutter_rust_bridge::for_generated::SseCodec, _, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "my_comments_page_dto_default",
+            port: Some(port_),
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            deserializer.end();
+            move |context| {
+                transform_result_sse::<_, ()>((move || {
+                    let output_ok = Ok::<_, ()>(crate::api::dto::MyCommentsPageDto::default())?;
+                    std::result::Result::Ok(output_ok)
+                })())
             }
         },
     )
@@ -2081,6 +2181,18 @@ impl SseDecode for Vec<crate::api::dto::HotItemDto> {
     }
 }
 
+impl SseDecode for Vec<crate::api::dto::MyCommentDto> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut len_ = <i32>::sse_decode(deserializer);
+        let mut ans_ = Vec::with_capacity(len_ as usize);
+        for idx_ in 0..len_ {
+            ans_.push(<crate::api::dto::MyCommentDto>::sse_decode(deserializer));
+        }
+        return ans_;
+    }
+}
+
 impl SseDecode for Vec<u8> {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
@@ -2114,6 +2226,32 @@ impl SseDecode for Vec<crate::api::dto::UserDto> {
             ans_.push(<crate::api::dto::UserDto>::sse_decode(deserializer));
         }
         return ans_;
+    }
+}
+
+impl SseDecode for crate::api::dto::MyCommentDto {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut var_comment = <crate::api::dto::CommentDto>::sse_decode(deserializer);
+        let mut var_root = <Option<crate::api::dto::StatusDto>>::sse_decode(deserializer);
+        return crate::api::dto::MyCommentDto {
+            comment: var_comment,
+            root: var_root,
+        };
+    }
+}
+
+impl SseDecode for crate::api::dto::MyCommentsPageDto {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut var_comments = <Vec<crate::api::dto::MyCommentDto>>::sse_decode(deserializer);
+        let mut var_nextCursor = <Option<i64>>::sse_decode(deserializer);
+        let mut var_total = <Option<i32>>::sse_decode(deserializer);
+        return crate::api::dto::MyCommentsPageDto {
+            comments: var_comments,
+            next_cursor: var_nextCursor,
+            total: var_total,
+        };
     }
 }
 
@@ -2432,34 +2570,42 @@ fn pde_ffi_dispatcher_primary_impl(
         26 => wire__crate__api__weibo__is_logged_in_impl(port, ptr, rust_vec_len, data_len),
         27 => wire__crate__api__weibo__long_text_impl(port, ptr, rust_vec_len, data_len),
         28 => wire__crate__api__weibo__my_blog_impl(port, ptr, rust_vec_len, data_len),
-        29 => wire__crate__api__weibo__parse_status_raw_impl(port, ptr, rust_vec_len, data_len),
-        30 => wire__crate__api__weibo__parse_timeline_raw_impl(port, ptr, rust_vec_len, data_len),
-        31 => wire__crate__api__weibo__post_status_impl(port, ptr, rust_vec_len, data_len),
-        32 => wire__crate__api__weibo__profile_impl(port, ptr, rust_vec_len, data_len),
-        33 => wire__crate__api__dto__qr_session_dto_default_impl(port, ptr, rust_vec_len, data_len),
-        34 => wire__crate__api__dto__qr_status_dto_default_impl(port, ptr, rust_vec_len, data_len),
-        35 => wire__crate__api__weibo__repost_impl(port, ptr, rust_vec_len, data_len),
-        36 => wire__crate__api__weibo__reposts_impl(port, ptr, rust_vec_len, data_len),
-        37 => wire__crate__api__weibo__restore_impl(port, ptr, rust_vec_len, data_len),
-        38 => wire__crate__api__weibo__save_impl(port, ptr, rust_vec_len, data_len),
-        39 => wire__crate__api__weibo__search_impl(port, ptr, rust_vec_len, data_len),
-        40 => wire__crate__api__weibo__set_like_impl(port, ptr, rust_vec_len, data_len),
-        41 => wire__crate__api__weibo__signin_url_impl(port, ptr, rust_vec_len, data_len),
-        42 => wire__crate__api__weibo__status_detail_impl(port, ptr, rust_vec_len, data_len),
-        43 => wire__crate__api__weibo__status_detail_raw_impl(port, ptr, rust_vec_len, data_len),
-        44 => wire__crate__api__dto__status_dto_default_impl(port, ptr, rust_vec_len, data_len),
-        45 => wire__crate__api__dto__status_raw_dto_default_impl(port, ptr, rust_vec_len, data_len),
-        46 => {
+        29 => wire__crate__api__dto__my_comment_dto_default_impl(port, ptr, rust_vec_len, data_len),
+        30 => wire__crate__api__weibo__my_comments_impl(port, ptr, rust_vec_len, data_len),
+        31 => wire__crate__api__dto__my_comments_page_dto_default_impl(
+            port,
+            ptr,
+            rust_vec_len,
+            data_len,
+        ),
+        32 => wire__crate__api__weibo__parse_status_raw_impl(port, ptr, rust_vec_len, data_len),
+        33 => wire__crate__api__weibo__parse_timeline_raw_impl(port, ptr, rust_vec_len, data_len),
+        34 => wire__crate__api__weibo__post_status_impl(port, ptr, rust_vec_len, data_len),
+        35 => wire__crate__api__weibo__profile_impl(port, ptr, rust_vec_len, data_len),
+        36 => wire__crate__api__dto__qr_session_dto_default_impl(port, ptr, rust_vec_len, data_len),
+        37 => wire__crate__api__dto__qr_status_dto_default_impl(port, ptr, rust_vec_len, data_len),
+        38 => wire__crate__api__weibo__repost_impl(port, ptr, rust_vec_len, data_len),
+        39 => wire__crate__api__weibo__reposts_impl(port, ptr, rust_vec_len, data_len),
+        40 => wire__crate__api__weibo__restore_impl(port, ptr, rust_vec_len, data_len),
+        41 => wire__crate__api__weibo__save_impl(port, ptr, rust_vec_len, data_len),
+        42 => wire__crate__api__weibo__search_impl(port, ptr, rust_vec_len, data_len),
+        43 => wire__crate__api__weibo__set_like_impl(port, ptr, rust_vec_len, data_len),
+        44 => wire__crate__api__weibo__signin_url_impl(port, ptr, rust_vec_len, data_len),
+        45 => wire__crate__api__weibo__status_detail_impl(port, ptr, rust_vec_len, data_len),
+        46 => wire__crate__api__weibo__status_detail_raw_impl(port, ptr, rust_vec_len, data_len),
+        47 => wire__crate__api__dto__status_dto_default_impl(port, ptr, rust_vec_len, data_len),
+        48 => wire__crate__api__dto__status_raw_dto_default_impl(port, ptr, rust_vec_len, data_len),
+        49 => {
             wire__crate__api__dto__timeline_page_dto_default_impl(port, ptr, rust_vec_len, data_len)
         }
-        47 => {
+        50 => {
             wire__crate__api__dto__timeline_raw_dto_default_impl(port, ptr, rust_vec_len, data_len)
         }
-        48 => wire__crate__api__weibo__uid_impl(port, ptr, rust_vec_len, data_len),
-        49 => wire__crate__api__dto__user_dto_default_impl(port, ptr, rust_vec_len, data_len),
-        50 => wire__crate__api__weibo__user_info_impl(port, ptr, rust_vec_len, data_len),
-        51 => wire__crate__api__weibo__user_timeline_page_impl(port, ptr, rust_vec_len, data_len),
-        52 => {
+        51 => wire__crate__api__weibo__uid_impl(port, ptr, rust_vec_len, data_len),
+        52 => wire__crate__api__dto__user_dto_default_impl(port, ptr, rust_vec_len, data_len),
+        53 => wire__crate__api__weibo__user_info_impl(port, ptr, rust_vec_len, data_len),
+        54 => wire__crate__api__weibo__user_timeline_page_impl(port, ptr, rust_vec_len, data_len),
+        55 => {
             wire__crate__api__weibo__user_timeline_page_raw_impl(port, ptr, rust_vec_len, data_len)
         }
         _ => unreachable!(),
@@ -2571,6 +2717,46 @@ impl flutter_rust_bridge::IntoIntoDart<crate::api::dto::HotItemDto>
     for crate::api::dto::HotItemDto
 {
     fn into_into_dart(self) -> crate::api::dto::HotItemDto {
+        self
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::api::dto::MyCommentDto {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        [
+            self.comment.into_into_dart().into_dart(),
+            self.root.into_into_dart().into_dart(),
+        ]
+        .into_dart()
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive for crate::api::dto::MyCommentDto {}
+impl flutter_rust_bridge::IntoIntoDart<crate::api::dto::MyCommentDto>
+    for crate::api::dto::MyCommentDto
+{
+    fn into_into_dart(self) -> crate::api::dto::MyCommentDto {
+        self
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::api::dto::MyCommentsPageDto {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        [
+            self.comments.into_into_dart().into_dart(),
+            self.next_cursor.into_into_dart().into_dart(),
+            self.total.into_into_dart().into_dart(),
+        ]
+        .into_dart()
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive
+    for crate::api::dto::MyCommentsPageDto
+{
+}
+impl flutter_rust_bridge::IntoIntoDart<crate::api::dto::MyCommentsPageDto>
+    for crate::api::dto::MyCommentsPageDto
+{
+    fn into_into_dart(self) -> crate::api::dto::MyCommentsPageDto {
         self
     }
 }
@@ -2898,6 +3084,16 @@ impl SseEncode for Vec<crate::api::dto::HotItemDto> {
     }
 }
 
+impl SseEncode for Vec<crate::api::dto::MyCommentDto> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <i32>::sse_encode(self.len() as _, serializer);
+        for item in self {
+            <crate::api::dto::MyCommentDto>::sse_encode(item, serializer);
+        }
+    }
+}
+
 impl SseEncode for Vec<u8> {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
@@ -2925,6 +3121,23 @@ impl SseEncode for Vec<crate::api::dto::UserDto> {
         for item in self {
             <crate::api::dto::UserDto>::sse_encode(item, serializer);
         }
+    }
+}
+
+impl SseEncode for crate::api::dto::MyCommentDto {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <crate::api::dto::CommentDto>::sse_encode(self.comment, serializer);
+        <Option<crate::api::dto::StatusDto>>::sse_encode(self.root, serializer);
+    }
+}
+
+impl SseEncode for crate::api::dto::MyCommentsPageDto {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <Vec<crate::api::dto::MyCommentDto>>::sse_encode(self.comments, serializer);
+        <Option<i64>>::sse_encode(self.next_cursor, serializer);
+        <Option<i32>>::sse_encode(self.total, serializer);
     }
 }
 

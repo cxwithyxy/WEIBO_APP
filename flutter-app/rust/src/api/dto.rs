@@ -19,7 +19,8 @@
 
 use weibo_core::auth::{QrSession, QrState, QrStatus};
 use weibo_core::models::{
-    weibo_strip_tags, Comment, HotBandItem, HotItem, Status, TimelinePage, TimelineRaw, User,
+    weibo_strip_tags, Comment, HotBandItem, HotItem, MyCommentsPage, Status, TimelinePage,
+    TimelineRaw, User,
 };
 
 // ------------------------------------------------------------------ 用户
@@ -284,6 +285,45 @@ pub struct CommentPageDto {
     /// 下一页游标（原样回传）
     pub next_max_id: Option<i64>,
     pub total: Option<i32>,
+}
+
+/// 「我的评论」的一条。
+///
+/// 不复用 `CommentDto` 是有原因的：这里必须带**被评论的原微博**（`root`），
+/// 而且列表 UI 要展示「我评论了什么」+「评论的是哪条微博」，两者分开渲染。
+#[derive(Debug, Clone, Default)]
+pub struct MyCommentDto {
+    /// 评论本身
+    pub comment: CommentDto,
+    /// 被评论的原微博（`myCmt` 每条都带；缺失时为 None，UI 只显示评论正文）
+    pub root: Option<StatusDto>,
+}
+
+impl From<&Comment> for MyCommentDto {
+    fn from(c: &Comment) -> Self {
+        Self {
+            comment: CommentDto::from(c),
+            root: c.status.as_ref().map(|s| StatusDto::from(s.as_ref())),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct MyCommentsPageDto {
+    pub comments: Vec<MyCommentDto>,
+    /// 下一页游标（数字，原样回传当 `max_id`）
+    pub next_cursor: Option<i64>,
+    pub total: Option<i32>,
+}
+
+impl From<MyCommentsPage> for MyCommentsPageDto {
+    fn from(p: MyCommentsPage) -> Self {
+        Self {
+            comments: p.comments.iter().map(MyCommentDto::from).collect(),
+            next_cursor: p.next_cursor,
+            total: p.total_number,
+        }
+    }
 }
 
 // ------------------------------------------------------------------ 热搜榜单

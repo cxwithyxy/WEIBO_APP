@@ -301,6 +301,30 @@ impl WeiboClient {
         })
     }
 
+    /// 「我的评论」—— 我发出的评论（`/ajax/message/myCmt`）。
+    ///
+    /// 与 `comments_page` 是**两套独立游标**：这里用 `next_cursor`（数字），
+    /// 首次不传；每次把上一页的 `next_cursor` 原样回传当 `max_id`。
+    /// 实测：`max_id` 不传 = 第 1 页；传上一页 `next_cursor` = 下一页，
+    /// 两页无重叠；共 9499 条时第 2 页 14 条。
+    ///
+    /// 每条都带 `status`（被评论的原微博），可直接点进原微博。
+    pub fn my_comments(&self, cursor: Option<i64>) -> Result<MyCommentsPage, WeiboError> {
+        let path = match cursor {
+            Some(c) => format!("/ajax/message/myCmt?max_id={c}"),
+            None => "/ajax/message/myCmt".to_string(),
+        };
+        let json = self.get_json(path)?;
+        let r: MyCommentsResp = self.parse(&json)?;
+        self.check_ok(r.ok, r.message.as_deref(), "我的评论")?;
+        let d = r.data.unwrap_or_default();
+        Ok(MyCommentsPage {
+            comments: d.comments,
+            next_cursor: d.next_cursor,
+            total_number: d.total_number,
+        })
+    }
+
     /// 转发列表
     pub fn reposts(&self, mid: String, page: u32) -> Result<Vec<Status>, WeiboError> {
         let json = self.get_json(format!("/ajax/statuses/repostTimeline?id={mid}&page={page}"))?;
@@ -613,6 +637,65 @@ mod tests {
         assert_eq!(s2.plain_text(), "html ok");
         let s3: Status = serde_json::from_str("{}").unwrap();
         assert_eq!(s3.plain_text(), "");
+    }
+
+    /// 表情是 `<img alt="[xx]">`，剥标签必须保留 alt —— 否则纯表情评论变空白。
+    #[test]
+    fn html_to_text_keeps_emoji_alt() {
+        let only_emoji = r#"<img alt="[微笑]" title="[微笑]" src="https://face.t.sinajs.cn/x.png" />"#;
+        assert_eq!(html_to_text(only_emoji), "[微笑]");
+
+        let mixed = r#"小作坊就小作坊<img alt="[doge]" title="[doge]" src="x.png" /><a href=/n/abc>@abc</a>:嗯"#;
+        assert_eq!(html_to_text(mixed), "小作坊就小作坊[doge]@abc:嗯");
+
+        assert_eq!(html_to_text("<b>a</b> &amp; b"), "a & b");
+        assert_eq!(html_to_text(""), "");
+    }
+
+    /// 「我的评论」的 `text_raw` 是空串，必须回落到 HTML 的 `text`。
+    #[test]
+    fn my_comment_plain_text_falls_back_to_empty_text_raw() {
+        let c: Comment = serde_json::from_str(
+            r#"{"text_raw":"","text":"<img alt=\"[微笑]\" src=\"x.png\"/>"}"#,
+        )
+        .unwrap();
+        assert_eq!(c.plain_text(), "[微笑]");
+
+        let c2: Comment =
+            serde_json::from_str(r#"{"text_raw":"raw","text":"<b>html</b>"}"#).unwrap();
+        assert_eq!(c2.plain_text(), "raw");
+    }
+
+    /// 解析 `/ajax/message/myCmt` 响应：`data` 是对象、游标是数字、评论带原微博。
+    #[test]
+    fn parse_my_comments_resp() {
+        let raw = r#"{"ok":1,"data":{"comments":[
+            {"id":5353931577754423,"idstr":"5353931577754423","text":"<img alt=\"[微笑]\" src=\"x.png\"/>",
+             "created_at":"Wed Oct 14 14:43:42 +0800 2026","like_counts":0,"floor_number":17,
+             "rootid":5353931577754423,
+             "user":{"id":1000000001,"screen_name":"me"},
+             "status":{"id":5353887871535610,"idstr":"5353887871535610","mid":"5353887871535610",
+                       "text":"原微博正文","user":{"id":1,"screen_name":"财联社APP"}}}
+        ],"next_cursor":5131773927229958,"total_number":9499}}"#;
+        let r: MyCommentsResp = serde_json::from_str(raw).unwrap();
+        assert_eq!(r.ok, Some(1));
+        let d = r.data.expect("data 应存在");
+        assert_eq!(d.comments.len(), 1);
+        assert_eq!(d.next_cursor, Some(5131773927229958));
+        assert_eq!(d.total_number, Some(9499));
+        let c = &d.comments[0];
+        assert_eq!(c.plain_text(), "[微笑]");
+        let st = c.status.as_ref().expect("应带原微博");
+        assert_eq!(st.idstr.as_deref(), Some("5353887871535610"));
+        assert_eq!(st.plain_text(), "原微博正文");
+    }
+
+    /// 游标给成字符串也要能解析（微博接口的字符串/数字混用）。
+    #[test]
+    fn my_comments_cursor_accepts_string() {
+        let raw = r#"{"ok":1,"data":{"comments":[],"next_cursor":"5131773927229958"}}"#;
+        let r: MyCommentsResp = serde_json::from_str(raw).unwrap();
+        assert_eq!(r.data.unwrap().next_cursor, Some(5131773927229958));
     }
 
     #[test]

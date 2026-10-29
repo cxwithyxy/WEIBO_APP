@@ -21,8 +21,8 @@ use weibo_core::client::WeiboClient;
 use weibo_core::reqwest_engine::ReqwestEngine;
 
 use crate::api::dto::{
-    CommentDto, CommentPageDto, HotBandItemDto, HotItemDto, QrSessionDto, QrStatusDto, StatusDto,
-    StatusRawDto, TimelinePageDto, TimelineRawDto, UserDto,
+    CommentDto, CommentPageDto, HotBandItemDto, HotItemDto, MyCommentsPageDto, QrSessionDto,
+    QrStatusDto, StatusDto, StatusRawDto, TimelinePageDto, TimelineRawDto, UserDto,
 };
 use crate::api::error::WeiboFailure;
 
@@ -322,6 +322,18 @@ pub async fn comments_page(
             next_max_id: p.next_max_id,
             total: p.total_number,
         })
+    })
+    .await
+}
+
+/// 「我的评论」—— 我发出的评论（`/ajax/message/myCmt`）。
+///
+/// `cursor` 传上一页的 `next_cursor`；首页传 `None`。
+pub async fn my_comments(cursor: Option<i64>) -> Result<MyCommentsPageDto, WeiboFailure> {
+    let c = client()?;
+    on_blocking_pool(move || {
+        let p = c.my_comments(cursor).map_err(WeiboFailure::from)?;
+        Ok(MyCommentsPageDto::from(p))
     })
     .await
 }

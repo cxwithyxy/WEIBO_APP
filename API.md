@@ -322,6 +322,37 @@ GET /ajax/profile/followContent?uid=<uid>
 
 响应：`data.follows.users[]`、`data.total_number`
 
+### 4.13 我的评论（发出的评论）✅ 已实测
+
+```
+GET /ajax/message/myCmt            # 第一页
+GET /ajax/message/myCmt?max_id=<next_cursor>   # 翻页
+```
+
+响应：`data.comments[]`、`data.next_cursor`、`data.total_number`
+（`data` 是**对象**，不是数组）
+
+| 项 | 说明 |
+|---|---|
+| `next_cursor` | 翻页游标，实测是**数字**（如 `5131773927229958`），原样回传当 `max_id` |
+| 首页 | `max_id` **不传**（传 `0` 未验证，别照抄 `buildComments` 的 `max_id=0` 习惯） |
+| 每页条数 | 实测 20 条（首屏）；尾页可能更少（第 2 页 14 条）|
+| `total_number` | 累计总数（实测 9499）|
+
+**与 `buildComments` 的关键差异（踩过）：**
+
+1. **两套游标**：这里用 `next_cursor`，`buildComments` 用 `max_id`，互不通用。
+2. **`text_raw` 是空字符串**，正文只在 HTML 的 `text` 里。若按「优先 text_raw」的
+   通用逻辑取文本，会拿到空串 → 整条评论**空白**。
+3. **表情是 `<img alt="[微笑]">`**，不是文字。剥标签时必须先取 `alt` 再剥，
+   反过来纯表情评论会渲染成空白（实测第一条评论只有一个 `[微笑]`）。
+4. **每条都带 `status`**（被评论的原微博对象），可直接显示上下文 + 点进原微博，
+   **不需要**再按 id 补拉详情。
+
+同类端点（同一 `tagMessage` 配置表里，未逐个实测）：
+`/ajax/message/cmt`（收到的评论，`filter_by_author=1` 为「关注人的评论」）、
+`/ajax/message/attitudes`（赞）、`/ajax/message/msgList?type=...`（@我的等）。
+
 ### 已确认不可用的接口
 
 | 接口 | 返回 |

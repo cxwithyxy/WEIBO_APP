@@ -477,6 +477,37 @@ fn run_command(
             }
         }
 
+        // 我的评论（发出的评论）。不带游标 = 第一页；`--cursor <n>` 翻页。
+        "mycomments" => {
+            let cursor: Option<i64> = arg_value(args, "--cursor").and_then(|s| s.parse().ok());
+            let p = client.my_comments(cursor)?;
+            println!(
+                "我的评论（本页 {} 条，共 {} 条）\n",
+                p.comments.len(),
+                p.total_number.unwrap_or(-1)
+            );
+            for c in &p.comments {
+                let text: String = c.plain_text().replace('\n', " ").chars().take(90).collect();
+                let root = c
+                    .status
+                    .as_ref()
+                    .map(|s| {
+                        let who = s
+                            .user
+                            .as_ref()
+                            .and_then(|u| u.screen_name.clone())
+                            .unwrap_or_else(|| "?".into());
+                        let t: String = s.plain_text().replace('\n', " ").chars().take(45).collect();
+                        format!("{who}: {t}")
+                    })
+                    .unwrap_or_else(|| "(无原微博)".into());
+                println!("· {text}\n    原微博 ← {root}");
+            }
+            if let Some(n) = p.next_cursor {
+                println!("\n下一页游标: {n}（--cursor {n}）");
+            }
+        }
+
         "reposts" => {
             let mid = args.get(2).cloned().unwrap_or_default();
             if mid.is_empty() {

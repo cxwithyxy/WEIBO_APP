@@ -11,6 +11,42 @@ use std::sync::LazyLock;
 /// HTML 标签正则（对应 Kotlin `Regex("<[^>]+>")`）
 static TAG_RE: LazyLock<regex::Regex> = LazyLock::new(|| regex::Regex::new("<[^>]+>").unwrap());
 
+/// 表情图标签：`<img alt="[微笑]" title="[微笑]" src="..."/>`。
+///
+/// 微博的正文/评论里表情**不是文字**，而是一个 `<img>`，文字只在 `alt` 里。
+/// 「直接把标签剥掉」会把表情整个删掉 —— 纯表情评论（实测「我的评论」
+/// 第一条就只有一个 `[微笑]`）会渲染成**空白**。
+static EMOJI_IMG_RE: LazyLock<regex::Regex> =
+    LazyLock::new(|| regex::Regex::new(r"<img\b[^>]*>").unwrap());
+
+static ALT_ATTR_RE: LazyLock<regex::Regex> =
+    LazyLock::new(|| regex::Regex::new(r#"alt="([^"]*)""#).unwrap());
+
+/// 微博 HTML 正文 → 纯文本：表情取 `alt`，其余标签剥掉，再还原常见实体。
+///
+/// 顺序很重要：**先取表情的 alt**，再剥标签；反过来 alt 就没了。
+pub fn html_to_text(html: &str) -> String {
+    // 表情：把整段 `<img ...>` 换成它的 `alt`（`[微笑]` 这种）。
+    // 注意必须匹配**整个标签**：只匹配到 `<img alt="x"` 的话，剩下的
+    // ` src=.../>` 已经不含 `<`，后面的 TAG_RE 就剥不掉，会漏进正文。
+    let with_emoji = EMOJI_IMG_RE.replace_all(html, |caps: &regex::Captures| {
+        ALT_ATTR_RE
+            .captures(&caps[0])
+            .map(|c| c[1].to_string())
+            .unwrap_or_default()
+    });
+    let stripped = TAG_RE.replace_all(&with_emoji, "");
+    stripped
+        .replace("&amp;", "&")
+        .replace("&lt;", "<")
+        .replace("&gt;", ">")
+        .replace("&quot;", "\"")
+        .replace("&#39;", "'")
+        .replace("&nbsp;", " ")
+        .trim()
+        .to_string()
+}
+
 /// 把任意 JSON 值序列化成它的文本形式。
 ///
 /// 用途：`isAd` 字段是**多态的**（实测有时 bool、有时数字、有时字符串），
@@ -239,10 +275,12 @@ impl Status {
     /// 纯文本（优先 text_raw，其次剥离 HTML 标签）
     pub fn plain_text(&self) -> String {
         if let Some(t) = &self.text_raw {
-            return t.clone();
+            if !t.is_empty() {
+                return t.clone();
+            }
         }
         match &self.text {
-            Some(t) => TAG_RE.replace_all(t, "").to_string(),
+            Some(t) => html_to_text(t),
             None => String::new(),
         }
     }
@@ -673,6 +711,11 @@ pub struct Comment {
     pub pic_infos: Option<HashMap<String, PicInfo>>,
     #[serde(default, rename = "pic_num")]
     pub pic_num: Option<i32>,
+    /// 被评论的**原微博** —— 只有「我的评论」(`/ajax/message/myCmt`) 会带；
+    /// `buildComments` 不带（那里原微博是调用方已知的）。
+    /// 用 `Box` 避免 `Comment` ↔ `Status` 之间因 `retweeted_status` 撑出无限大小。
+    #[serde(default)]
+    pub status: Option<Box<Status>>,
 }
 
 impl Comment {
@@ -682,11 +725,15 @@ impl Comment {
     }
 
     pub fn plain_text(&self) -> String {
+        // ⚠️「我的评论」(`/ajax/message/myCmt`) 的 `text_raw` **是空字符串**，
+        // 内容全在 HTML 的 `text` 里；这里必须回落到 `text`，否则整条评论空白。
         if let Some(t) = &self.text_raw {
-            return t.clone();
+            if !t.is_empty() {
+                return t.clone();
+            }
         }
         match &self.text {
-            Some(t) => TAG_RE.replace_all(t, "").to_string(),
+            Some(t) => html_to_text(t),
             None => String::new(),
         }
     }
@@ -697,6 +744,18 @@ impl Comment {
 pub struct CommentPage {
     pub comments: Vec<Comment>,
     pub next_max_id: Option<i64>,
+    pub total_number: Option<i32>,
+}
+
+/// 「我的评论」（`/ajax/message/myCmt`）一页。
+///
+/// 翻页游标是 `next_cursor`（**数字**，原样回传当 `max_id` 用），
+/// 与 `buildComments` 的 `max_id` 是两套独立游标，别混用。
+#[cfg_attr(feature = "uniffi-ffi", derive(uniffi::Record))]
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+pub struct MyCommentsPage {
+    pub comments: Vec<Comment>,
+    pub next_cursor: Option<i64>,
     pub total_number: Option<i32>,
 }
 
@@ -841,6 +900,26 @@ pub(crate) struct CommentsResp {
     pub total_number: Option<i32>,
     #[serde(default)]
     pub max_id: Option<i64>,
+}
+
+/// `/ajax/message/myCmt` 响应：`data` 是一个对象（不是数组）。
+#[derive(Debug, Default, Deserialize)]
+pub(crate) struct MyCommentsResp {
+    pub ok: Option<i32>,
+    pub message: Option<String>,
+    #[serde(default)]
+    pub data: Option<MyCommentsData>,
+}
+
+#[derive(Debug, Default, Deserialize)]
+pub(crate) struct MyCommentsData {
+    #[serde(default)]
+    pub comments: Vec<Comment>,
+    /// 翻页游标；实测是**数字**，但也可能被返回成字符串，故用宽松解析。
+    #[serde(default, deserialize_with = "de_scalar_i64")]
+    pub next_cursor: Option<i64>,
+    #[serde(default, rename = "total_number")]
+    pub total_number: Option<i32>,
 }
 
 #[derive(Debug, Default, Deserialize)]
