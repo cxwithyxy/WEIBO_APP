@@ -338,6 +338,19 @@ pub async fn my_comments(cursor: Option<i64>) -> Result<MyCommentsPageDto, Weibo
     .await
 }
 
+/// 「回复我的评论」—— 别人回复我发出的评论（`/ajax/message/cmt`）。
+///
+/// 每条都带 `reply_comment`（我的原评论）与 `status`（原微博），
+/// 所以既能显示上下文，也能直接对 TA 回复（`replyToCid` 用这条回复的 id）。
+pub async fn receivedComments(cursor: Option<i64>) -> Result<MyCommentsPageDto, WeiboFailure> {
+    let c = client()?;
+    on_blocking_pool(move || {
+        let p = c.received_comments(cursor).map_err(WeiboFailure::from)?;
+        Ok(MyCommentsPageDto::from(p))
+    })
+    .await
+}
+
 /// 转发列表
 pub async fn reposts(mid: String, page: u32) -> Result<Vec<StatusDto>, WeiboFailure> {
     let c = client()?;

@@ -349,9 +349,41 @@ GET /ajax/message/myCmt?max_id=<next_cursor>   # 翻页
 4. **每条都带 `status`**（被评论的原微博对象），可直接显示上下文 + 点进原微博，
    **不需要**再按 id 补拉详情。
 
-同类端点（同一 `tagMessage` 配置表里，未逐个实测）：
-`/ajax/message/cmt`（收到的评论，`filter_by_author=1` 为「关注人的评论」）、
+同类端点：`/ajax/message/cmt`（**已实测**，见 4.14）、
 `/ajax/message/attitudes`（赞）、`/ajax/message/msgList?type=...`（@我的等）。
+
+### 4.14 回复我的评论 ✅ 已实测
+
+```
+GET /ajax/message/cmt                          # 第一页
+GET /ajax/message/cmt?max_id=<next_cursor>     # 翻页
+```
+
+响应结构与 4.13 **完全一致**（`data.comments[]` + `next_cursor` + `total_number`），
+可共用同一份解析代码。
+
+**语义（实测结论，别望文生义）**：这个桶返回的是**「别人回复我发出的评论」** ——
+连翻 3 页共 8 条，`reply_comment.user.id` **全部**是我本人。评论我微博的那类不走这里。
+
+| 字段 | 说明 |
+|---|---|
+| `reply_comment{}` | **我原来那条评论**（`text` + `user`=我自己）|
+| `status{}` | 原微博对象（可能因作者设置可见范围而内容为空，见下）|
+| `rootid` | 该回复所在评论串的**根评论** id（分线程用，非必须）|
+| `reply_original_text` | 原评论纯文本（可选，`reply_comment.text` 更全）|
+| 每页条数 | ⚠️ **不固定**，实测 2 / 5 / 1 条 → 判断「还有下一页」**只能看 `next_cursor`**，不能用「不满 20 条即到头」 |
+
+**坑**：`status.text` 可能是
+`抱歉，根据作者设置的微博可见时间范围，此微博已不可见。` —— 作者设了可见范围。
+UI 要把它当**占位文本正常显示**，不能当成空微博或解析失败。
+
+**回复 TA 用哪个写接口**：对某条评论回复走
+
+```
+POST /ajax/comments/reply   （id=<原微博 mid>, cid=<这条回复的 id>, comment=<正文>）
+```
+
+即「回复某条评论」= `/ajax/comments/reply` + `cid`，**不是** `comments/create`。
 
 ### 已确认不可用的接口
 

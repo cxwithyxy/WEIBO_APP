@@ -149,6 +149,13 @@ Future<CommentPageDto> commentsPage({
 Future<MyCommentsPageDto> myComments({PlatformInt64? cursor}) =>
     RustLib.instance.api.crateApiWeiboMyComments(cursor: cursor);
 
+/// 「回复我的评论」—— 别人回复我发出的评论（`/ajax/message/cmt`）。
+///
+/// 每条都带 `reply_comment`（我的原评论）与 `status`（原微博），
+/// 所以既能显示上下文，也能直接对 TA 回复（`replyToCid` 用这条回复的 id）。
+Future<MyCommentsPageDto> receivedComments({PlatformInt64? cursor}) =>
+    RustLib.instance.api.crateApiWeiboReceivedComments(cursor: cursor);
+
 /// 转发列表
 Future<List<StatusDto>> reposts({required String mid, required int page}) =>
     RustLib.instance.api.crateApiWeiboReposts(mid: mid, page: page);

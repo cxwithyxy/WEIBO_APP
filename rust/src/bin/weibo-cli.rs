@@ -508,6 +508,49 @@ fn run_command(
             }
         }
 
+        // 回复我的评论（别人回复我发出的评论）。`--cursor <n>` 翻页。
+        "replies" => {
+            let cursor: Option<i64> = arg_value(args, "--cursor").and_then(|s| s.parse().ok());
+            let p = client.received_comments(cursor)?;
+            println!(
+                "回复我的评论（本页 {} 条，共 {} 条）\n",
+                p.comments.len(),
+                p.total_number.unwrap_or(-1)
+            );
+            for c in &p.comments {
+                let who = c
+                    .user
+                    .as_ref()
+                    .and_then(|u| u.screen_name.clone())
+                    .unwrap_or_else(|| "?".into());
+                let text: String = c.plain_text().replace('\n', " ").chars().take(70).collect();
+                let mine: String = c
+                    .reply_comment
+                    .as_ref()
+                    .map(|m| m.plain_text().replace('\n', " ").chars().take(40).collect())
+                    .unwrap_or_default();
+                let root: String = c
+                    .status
+                    .as_ref()
+                    .map(|s| {
+                        let u = s
+                            .user
+                            .as_ref()
+                            .and_then(|u| u.screen_name.clone())
+                            .unwrap_or_else(|| "?".into());
+                        let t: String = s.plain_text().replace('\n', " ").chars().take(30).collect();
+                        format!("{u}: {t}")
+                    })
+                    .unwrap_or_else(|| "(无)".into());
+                println!("· {who} 回复: {text}");
+                println!("    我原来: {mine}");
+                println!("    原微博: {root}");
+            }
+            if let Some(n) = p.next_cursor {
+                println!("\n下一页游标: {n}（--cursor {n}）");
+            }
+        }
+
         "reposts" => {
             let mid = args.get(2).cloned().unwrap_or_default();
             if mid.is_empty() {

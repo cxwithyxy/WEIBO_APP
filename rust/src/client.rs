@@ -325,6 +325,36 @@ impl WeiboClient {
         })
     }
 
+    /// 「回复我的评论」（`/ajax/message/cmt`）—— 别人回复我发出的评论。
+    ///
+    /// 实测这个桶里**每条都是「回复我的评论」**：`reply_comment.user` 恒为我本人
+    /// （连翻 3 页共 8 条无一例外）。评论我微博的那类会走另一个桶。
+    ///
+    /// 响应形状与 `my_comments` 完全一致（`data.comments[]` + `next_cursor` +
+    /// `total_number`），所以共用同一个 `MyCommentsResp` / `MyCommentsPage`；
+    /// 差别只在内容：这里的 `reply_comment` 是**我的原评论**，`status` 是原微博。
+    ///
+    /// 翻页同样用 `next_cursor` 回传当 `max_id`。注意每页条数不定（实测
+    /// 2 / 5 / 1 条），别拿固定 20 条去判断「还有没有下一页」。
+    pub fn received_comments(
+        &self,
+        cursor: Option<i64>,
+    ) -> Result<MyCommentsPage, WeiboError> {
+        let path = match cursor {
+            Some(c) => format!("/ajax/message/cmt?max_id={c}"),
+            None => "/ajax/message/cmt".to_string(),
+        };
+        let json = self.get_json(path)?;
+        let r: MyCommentsResp = self.parse(&json)?;
+        self.check_ok(r.ok, r.message.as_deref(), "回复我的评论")?;
+        let d = r.data.unwrap_or_default();
+        Ok(MyCommentsPage {
+            comments: d.comments,
+            next_cursor: d.next_cursor,
+            total_number: d.total_number,
+        })
+    }
+
     /// 转发列表
     pub fn reposts(&self, mid: String, page: u32) -> Result<Vec<Status>, WeiboError> {
         let json = self.get_json(format!("/ajax/statuses/repostTimeline?id={mid}&page={page}"))?;
@@ -696,6 +726,33 @@ mod tests {
         let raw = r#"{"ok":1,"data":{"comments":[],"next_cursor":"5131773927229958"}}"#;
         let r: MyCommentsResp = serde_json::from_str(raw).unwrap();
         assert_eq!(r.data.unwrap().next_cursor, Some(5131773927229958));
+    }
+
+    /// 「回复我的评论」与「我的评论」**响应形状相同**，共用一份解析：
+    /// 关键是 `reply_comment`（我的原评论）+ `status`（原微博）都要能取到，
+    /// UI 才能显示「TA回复：… / 我原来：… / 原微博：…」并支持回复 TA。
+    #[test]
+    fn parse_received_comments_resp() {
+        let raw = r#"{"ok":1,"data":{"comments":[
+            {"idstr":"5266677526436109","text":"回复<a href=/n/me usercard=\"name=@me\">@me</a>:你说得对",
+             "created_at":"Wed Oct 14 15:00:00 +0800 2026","rootid":"5266677417642631",
+             "user":{"id":7984486935,"screen_name":"路人甲"},
+             "reply_comment":{"idstr":"5266677417642631","text":"缩小屏幕，屏幕越大越晕",
+                              "user":{"id":1000000001,"screen_name":"me"}},
+             "status":{"idstr":"5353887871535610","text":"原微博正文",
+                       "user":{"id":1826017320,"screen_name":"空客"}}}
+        ],"next_cursor":4641627685782740,"total_number":10158}}"#;
+        let r: MyCommentsResp = serde_json::from_str(raw).unwrap();
+        let d = r.data.expect("data 应存在");
+        assert_eq!(d.total_number, Some(10158));
+        assert_eq!(d.next_cursor, Some(4641627685782740));
+        let c = &d.comments[0];
+        // 回复正文里 @ 我的前缀会被保留（UI 层再决定要不要去掉）
+        assert_eq!(c.plain_text(), "回复@me:你说得对");
+        let mine = c.reply_comment.as_ref().expect("应有我的原评论");
+        assert_eq!(mine.plain_text(), "缩小屏幕，屏幕越大越晕");
+        let st = c.status.as_ref().expect("应有原微博");
+        assert_eq!(st.idstr.as_deref(), Some("5353887871535610"));
     }
 
     #[test]

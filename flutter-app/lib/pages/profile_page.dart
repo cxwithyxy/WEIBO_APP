@@ -9,6 +9,7 @@ import '../widgets/status_card.dart';
 import 'detail_page.dart';
 import 'compose_page.dart';
 import 'my_comments_page.dart';
+import 'replies_page.dart';
 import 'settings_page.dart';
 
 /// 「我的」页：个人资料 + 我的微博 + 发微博 + 外观设置 + 退出登录。
@@ -246,6 +247,14 @@ class _ProfilePageState extends State<ProfilePage> {
           subtitle: const Text('我发出的评论，可点进原微博'),
           onTap: () => Navigator.of(context).push(
             MaterialPageRoute(builder: (_) => const MyCommentsPage()),
+          ),
+        ),
+        ListTile(
+          leading: const Icon(Icons.reply_outlined),
+          title: const Text('回复我的评论'),
+          subtitle: const Text('谁回了我，可直接回 TA'),
+          onTap: () => Navigator.of(context).push(
+            MaterialPageRoute(builder: (_) => const RepliesPage()),
           ),
         ),
         ListTile(
